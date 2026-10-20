@@ -1,0 +1,19 @@
+{
+  "name": "arbour",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @arbour/web",
+    "build": "npm run build -w @arbour/web",
+    "start": "npm run start -w @arbour/web",
+    "test": "npm run test -w @arbour/mindmap-core",
+    "typecheck": "npm run typecheck -w @arbour/mindmap-core && npm run typecheck -w @arbour/web",
+    "lint": "npm run lint -w @arbour/web"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  }
+}

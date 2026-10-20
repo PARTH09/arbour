@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --arbour-app: #efece6;
+  --arbour-canvas: #f6f4ef;
+  --arbour-ink: #1c1917;
+  --arbour-muted: #78716c;
+  --arbour-line: #e5ddd2;
+  --arbour-accent: #0f6e56;
+  --arbour-accent-soft: #e6f3ee;
+  --arbour-danger: #be123c;
+  --arbour-panel: #fffcf8;
+  --arbour-grid: #d6d0c6;
+  color-scheme: light;
+}
+
+.dark {
+  --arbour-app: #10110f;
+  --arbour-canvas: #161714;
+  --arbour-ink: #f5f5f4;
+  --arbour-muted: #a8a29e;
+  --arbour-line: #32302b;
+  --arbour-accent: #3dbe9a;
+  --arbour-accent-soft: #17352c;
+  --arbour-danger: #fb7185;
+  --arbour-panel: #22231f;
+  --arbour-grid: #3a3833;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-app: var(--arbour-app);
+  --color-canvas: var(--arbour-canvas);
+  --color-ink: var(--arbour-ink);
+  --color-muted: var(--arbour-muted);
+  --color-line: var(--arbour-line);
+  --color-accent: var(--arbour-accent);
+  --color-accent-soft: var(--arbour-accent-soft);
+  --color-danger: var(--arbour-danger);
+  --color-panel: var(--arbour-panel);
+  --font-sans: var(--font-source-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-outfit), ui-sans-serif, sans-serif;
+  --font-mono: var(--font-plex), ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--arbour-app);
+  color: var(--arbour-ink);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+:focus-visible {
+  outline: 2px solid var(--arbour-accent);
+  outline-offset: 2px;
+}
+
+.react-flow {
+  background: var(--arbour-canvas);
+}
+
+.react-flow__node {
+  transition: transform 180ms ease;
+}
+
+.react-flow__node.dragging {
+  transition: none;
+}
+
+.react-flow__attribution {
+  background: transparent !important;
+  color: var(--arbour-muted) !important;
+  opacity: 0.7;
+}
+
+.react-flow__edge-path {
+  fill: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__node,
+  .arbour-motion {
+    transition: none !important;
+  }
+}
