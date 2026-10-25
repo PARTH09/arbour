@@ -66,7 +66,7 @@ The name at the bottom of the library opens people and roles.
 
 A viewer can look through the map and export it. An editor can change topics, layout, and undo. An owner of a map can also share it and move it to trash. Folder access applies to every map inside that folder. A workspace owner can see every map and add or remove people. The workspace keeps at least one owner.
 
-On the canvas, two-finger trackpad movement pans the map. Hover a topic and use the **+** buttons for a child (right) or sibling (bottom). Topic details can link to a website or another map on this device.
+On the canvas, two-finger trackpad movement pans the map. Hover a topic and use the **+** buttons for a child (right) or sibling (bottom). Keyboard flow matches common mind-map shortcuts: Tab child, Enter sibling, Mod+Enter sibling above, Alt+Enter parent, Mod+/ collapse, M for a detached topic, Mod+Shift+U for a link, Mod+Shift+V paste as outline, and Delete on a selected cross-link. Topic details can link to a website or another map on this device.
 
 Anyone using this browser can switch person. Sign-in is not part of the local app.
 

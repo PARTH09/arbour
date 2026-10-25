@@ -143,7 +143,19 @@ export type Command =
       side?: Side;
       imageUrl?: string | null;
     }
-  | { type: "addSibling"; nodeId: NodeId; text?: string; nodeType?: NodeType }
+  | {
+      type: "addSibling";
+      nodeId: NodeId;
+      text?: string;
+      nodeType?: NodeType;
+      placement?: "above" | "below";
+    }
+  | {
+      type: "addParent";
+      nodeId: NodeId;
+      text?: string;
+      nodeType?: NodeType;
+    }
   | {
       type: "addFloating";
       position: Point;

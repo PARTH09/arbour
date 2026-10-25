@@ -10,6 +10,7 @@ import {
   findDropTarget,
   nearestInDirection,
   normalizeDocument,
+  refreshDocumentStyles,
 } from "./document";
 import { createHistory, historyCommit, historyRedo, historyUndo } from "./history";
 import { visibleNodeBoxes } from "./layout";
@@ -111,6 +112,30 @@ describe("hierarchy", () => {
     expect(created.map((id) => doc.nodes[id].style.borderColor)).toEqual(BRANCH_COLORS.slice(0, 3));
     expect(created.map((id) => doc.nodes[id].style.background)).toEqual(BRANCH_FILLS.slice(0, 3));
     expect(created.every((id) => doc.nodes[id].style.background !== "#ffffff")).toBe(true);
+
+    const leaf = run(doc, { type: "addChild", parentId: created[0], text: "Leaf" }, context);
+    expect(leaf.document.nodes[leaf.focusId!].style.borderColor).toBe(BRANCH_COLORS[0]);
+    expect(leaf.document.nodes[leaf.focusId!].style.background).toBe(BRANCH_FILLS[0]);
+  });
+
+  it("repairs white topic fills from older documents", () => {
+    const context = ctx();
+    let doc = map();
+    const branch = run(doc, { type: "addChild", parentId: doc.rootId, text: "Branch" }, context);
+    doc = branch.document;
+    doc = {
+      ...doc,
+      nodes: {
+        ...doc.nodes,
+        [branch.focusId!]: {
+          ...doc.nodes[branch.focusId!],
+          style: { ...doc.nodes[branch.focusId!].style, background: "#ffffff" },
+        },
+      },
+    };
+    const repaired = refreshDocumentStyles(doc);
+    expect(repaired.nodes[branch.focusId!].style.background).toBe(BRANCH_FILLS[0]);
+    expect(repaired.nodes[branch.focusId!].style.background).not.toBe("#ffffff");
   });
 
   it("can keep dense-map connectors on the right-side center handles", () => {
@@ -164,6 +189,60 @@ describe("hierarchy", () => {
     expect(documentIssues(promoted.document)).toEqual([]);
   });
 
+  it("inserts a sibling above and a parent between a topic and its parent", () => {
+    const context = ctx();
+    let doc = map();
+    const first = run(doc, { type: "addChild", parentId: doc.rootId, text: "First" }, context);
+    doc = first.document;
+    const second = run(doc, { type: "addSibling", nodeId: first.focusId!, text: "Second" }, context);
+    doc = second.document;
+
+    const above = run(
+      doc,
+      { type: "addSibling", nodeId: second.focusId!, text: "Above", placement: "above" },
+      context,
+    );
+    doc = above.document;
+    expect(childrenOf(doc, doc.rootId).map((node) => node.text)).toEqual(["First", "Above", "Second"]);
+
+    const wrapped = run(doc, { type: "addParent", nodeId: second.focusId!, text: "Parent" }, context);
+    doc = wrapped.document;
+    const parentNode = doc.nodes[wrapped.focusId!];
+    expect(parentNode.text).toBe("Parent");
+    expect(parentNode.parentId).toBe(doc.rootId);
+    expect(doc.nodes[second.focusId!].parentId).toBe(wrapped.focusId);
+    expect(childrenOf(doc, doc.rootId).map((node) => node.text)).toEqual(["First", "Above", "Parent"]);
+    expect(documentIssues(doc)).toEqual([]);
+
+    const blocked = run(doc, { type: "addParent", nodeId: doc.rootId }, context);
+    expect(blocked.changed).toBe(false);
+  });
+
+  it("deletes cross-links but keeps tree connectors", () => {
+    const context = ctx();
+    let doc = map();
+    const left = run(doc, { type: "addChild", parentId: doc.rootId, text: "Left", side: "left" }, context);
+    doc = left.document;
+    const right = run(doc, { type: "addChild", parentId: doc.rootId, text: "Right", side: "right" }, context);
+    doc = right.document;
+    const linked = run(
+      doc,
+      { type: "addLink", sourceId: left.focusId!, targetId: right.focusId! },
+      context,
+    );
+    doc = linked.document;
+    const linkId = Object.values(doc.edges).find((edge) => edge.kind === "link")?.id;
+    expect(linkId).toBeTruthy();
+    const treeIds = Object.values(doc.edges).filter((edge) => edge.kind === "tree").map((edge) => edge.id);
+
+    const removed = run(doc, { type: "deleteEdges", ids: [linkId!, ...treeIds] }, context);
+    expect(removed.changed).toBe(true);
+    expect(Object.values(removed.document.edges).some((edge) => edge.kind === "link")).toBe(false);
+    expect(Object.values(removed.document.edges).filter((edge) => edge.kind === "tree").length).toBe(
+      treeIds.length,
+    );
+  });
+
   it("duplicates a subtree with new ids", () => {
     const context = ctx();
     let doc = map();
@@ -196,6 +275,50 @@ describe("hierarchy", () => {
       "New readers",
       "Channel",
       "Newsletter",
+    ]);
+  });
+
+  it("imports Whimsical-style Markdown headings, bullets, and paste-special outlines", () => {
+    const fromHeadings = documentFromOutline(
+      [
+        "# Product Ideas",
+        "## Personal",
+        "- Automated **Task** Creation",
+        "- [Workflow Rules](https://example.com)",
+        "## Data",
+        "1. Analytics",
+        "2. Sync",
+      ].join("\n"),
+      undefined,
+      ctx(),
+    );
+    expect(fromHeadings?.title).toBe("Product Ideas");
+    expect(fromHeadings?.nodes[fromHeadings.rootId].text).toBe("Product Ideas");
+    const branches = childrenOf(fromHeadings!, fromHeadings!.rootId).map((node) => node.text);
+    expect(branches).toEqual(["Personal", "Data"]);
+    expect(childrenOf(fromHeadings!, childrenOf(fromHeadings!, fromHeadings!.rootId)[0].id).map((n) => n.text)).toEqual([
+      "Automated Task Creation",
+      "Workflow Rules",
+    ]);
+    expect(childrenOf(fromHeadings!, childrenOf(fromHeadings!, fromHeadings!.rootId)[1].id).map((n) => n.text)).toEqual([
+      "Analytics",
+      "Sync",
+    ]);
+
+    const fromBullets = documentFromOutline(
+      ["- Launch", "  - Audience", "    - New readers", "  - Channel"].join("\n"),
+      "from-whimsical",
+      ctx(),
+    );
+    expect(fromBullets?.title).toBe("from-whimsical");
+    expect(childrenOf(fromBullets!, fromBullets!.rootId).map((n) => n.text)).toEqual(["Audience", "Channel"]);
+
+    const pasteSpecial = parseOutline(["Ideas", "\tPersonal", "\t\tTask", "\tData"].join("\n"));
+    expect(pasteSpecial.map((line) => ({ depth: line.depth, text: line.text }))).toEqual([
+      { depth: 0, text: "Ideas" },
+      { depth: 1, text: "Personal" },
+      { depth: 2, text: "Task" },
+      { depth: 1, text: "Data" },
     ]);
   });
 

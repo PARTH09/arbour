@@ -14,6 +14,7 @@ import {
   effectiveFolderRole,
   layoutDocument,
   normalizeDocument,
+  refreshDocumentStyles,
   type AccessGrant,
   type AccessMember,
   type Command,
@@ -194,7 +195,7 @@ function schedulePersist(showStatus: boolean) {
 function restoreDocument(input: unknown): MindMapDocument | null {
   const parsed = documentSchema.safeParse(input);
   if (!parsed.success) return null;
-  if (documentIssues(parsed.data).length === 0) return parsed.data;
+  if (documentIssues(parsed.data).length === 0) return refreshDocumentStyles(parsed.data);
   const normalized = normalizeDocument(parsed.data);
   return normalized.ok ? normalized.document : null;
 }
@@ -389,7 +390,6 @@ export const useEditor = create<EditorState>((set, get) => ({
   hydrate: () => {
     if (get().ready) return;
     let next: Partial<EditorState> = {};
-    let needsAccessSave = false;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -408,7 +408,6 @@ export const useEditor = create<EditorState>((set, get) => ({
             : [];
           if (documents.length) {
             const data = saved as ReturnType<typeof serialize>;
-            needsAccessSave = !readMembers((saved as { members?: unknown }).members).some((member) => member.workspaceRole === "owner");
             const access = accessFrom(data);
             const documentIds = new Set(documents.map((document) => document.id));
             const documentFolders = readDocumentFolders(
@@ -461,7 +460,8 @@ export const useEditor = create<EditorState>((set, get) => ({
 
     set({ ...get(), ...next, ready: true });
     applyThemeClass(next.theme || "light");
-    if (needsAccessSave) schedulePersist(true);
+    // Persist repaired topic fills (older white backgrounds) and any access bootstrap.
+    schedulePersist(true);
     if (typeof window !== "undefined") {
       window.addEventListener("online", () => {
         if (useEditor.getState().saveStatus === "offline") useEditor.setState({ saveStatus: "saved" });
@@ -487,6 +487,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     const focuses = new Set([
       "addChild",
       "addSibling",
+      "addParent",
       "addFloating",
       "duplicate",
       "pasteOutline",
@@ -507,7 +508,14 @@ export const useEditor = create<EditorState>((set, get) => ({
       selection,
       editingId,
       editSelectAll: options?.selectAll ?? true,
-      selectedEdgeId: command.type === "patchEdges" || command.type === "addLink" ? state.selectedEdgeId : selection.length ? null : state.selectedEdgeId,
+      selectedEdgeId:
+        command.type === "deleteEdges"
+          ? null
+          : command.type === "patchEdges" || command.type === "addLink"
+            ? state.selectedEdgeId
+            : selection.length
+              ? null
+              : state.selectedEdgeId,
       banner: null,
     });
     schedulePersist(true);

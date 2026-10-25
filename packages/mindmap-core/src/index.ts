@@ -30,6 +30,7 @@ export {
   nearestInDirection,
   nodeCenter,
   normalizeDocument,
+  refreshDocumentStyles,
   subtreeIds,
   visibleChildren,
 } from "./document";
@@ -54,8 +55,11 @@ export {
   PALETTE,
   THEMES,
   defaultLayout,
+  fillForBorder,
   fontStack,
+  isWhiteFill,
   measureNode,
+  repairTopicFill,
 } from "./styles";
 export { toSvg } from "./svg";
 export { createTemplateDocument, createWelcomeDocument, listTemplates } from "./templates";

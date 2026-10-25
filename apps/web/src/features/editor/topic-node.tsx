@@ -150,6 +150,7 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
               dispatch({ type: "rename", nodeId: id, text: value }, { coalesceKey: `rename:${id}` });
             }}
             onKeyDown={(event) => {
+              const mod = event.metaKey || event.ctrlKey;
               if (event.key === "Escape") {
                 event.preventDefault();
                 event.stopPropagation();
@@ -158,6 +159,12 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
                   { coalesceKey: `rename:${id}` },
                 );
                 stopEditing();
+              } else if (event.key === "Enter" && event.altKey && !mod) {
+                event.preventDefault();
+                dispatch({ type: "addParent", nodeId: id }, { edit: true, selectAll: true });
+              } else if (event.key === "Enter" && mod) {
+                event.preventDefault();
+                dispatch({ type: "addSibling", nodeId: id, placement: "above" }, { edit: true, selectAll: true });
               } else if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 dispatch({ type: "addSibling", nodeId: id }, { edit: true, selectAll: true });
@@ -223,8 +230,8 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
           <button
             type="button"
             className={cn(
-              "nodrag nopan absolute z-20 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-panel text-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-white focus-visible:opacity-100",
-              selected && "opacity-100",
+              "nodrag nopan absolute z-20 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-panel text-muted shadow-sm transition opacity-70 hover:opacity-100 hover:bg-accent hover:text-white focus-visible:opacity-100",
+              selected && "opacity-100 ring-2 ring-accent/30",
             )}
             style={childAddStyle}
             aria-label="Add child topic"
@@ -240,8 +247,8 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
           <button
             type="button"
             className={cn(
-              "nodrag nopan absolute z-20 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-panel text-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-white focus-visible:opacity-100",
-              selected && "opacity-100",
+              "nodrag nopan absolute z-20 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-panel text-muted shadow-sm transition opacity-70 hover:opacity-100 hover:bg-accent hover:text-white focus-visible:opacity-100",
+              selected && "opacity-100 ring-2 ring-accent/30",
             )}
             style={siblingAddStyle}
             aria-label="Add sibling topic"

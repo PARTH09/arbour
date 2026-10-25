@@ -213,7 +213,7 @@ export function Toolbar() {
               onSelect={() => {
                 const input = window.document.createElement("input");
                 input.type = "file";
-                input.accept = "application/json,.json,.txt,.md,text/plain";
+                input.accept = "application/json,.json,.txt,.md,.markdown,text/plain,text/markdown";
                 input.onchange = async () => {
                   const file = input.files?.[0];
                   if (!file) return;
@@ -222,22 +222,29 @@ export function Toolbar() {
                     showBanner("That file is too large to import.");
                     return;
                   }
-                  try {
-                    const parsed = JSON.parse(text) as unknown;
-                    const result = parseDocument(parsed);
-                    if (!result.ok) {
-                      showBanner(result.error);
+                  const name = file.name.replace(/\.[^.]+$/, "");
+                  const looksJson = file.name.toLowerCase().endsWith(".json") || /^\s*[{\[]/.test(text);
+                  if (looksJson) {
+                    try {
+                      const parsed = JSON.parse(text) as unknown;
+                      const result = parseDocument(parsed);
+                      if (!result.ok) {
+                        showBanner(result.error);
+                        return;
+                      }
+                      importDocument(result.document);
+                      return;
+                    } catch {
+                      showBanner("That JSON file isn't a valid Arbour map.");
                       return;
                     }
-                    importDocument(result.document);
-                  } catch {
-                    const imported = documentFromOutline(text, file.name.replace(/\.[^.]+$/, ""));
-                    if (!imported) {
-                      showBanner("That file isn't a valid outline.");
-                      return;
-                    }
-                    importDocument(imported);
                   }
+                  const imported = documentFromOutline(text, name);
+                  if (!imported) {
+                    showBanner("That file isn't a valid outline or Markdown mind map.");
+                    return;
+                  }
+                  importDocument(imported);
                 };
                 input.click();
               }}

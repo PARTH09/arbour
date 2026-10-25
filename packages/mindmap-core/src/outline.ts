@@ -7,22 +7,55 @@ export interface OutlineLine {
   text: string;
 }
 
+/**
+ * Parse indented outlines and common Markdown exports (Whimsical paste-special,
+ * heading trees, bulleted/numbered lists) into a depth/text hierarchy.
+ */
 export function parseOutline(outline: string): OutlineLine[] {
   const parsed: OutlineLine[] = [];
-  for (const line of outline.replace(/\r\n/g, "\n").split("\n")) {
-    if (!line.trim()) continue;
-    const match = /^(\s*)(?:[-*•]\s+)?(.*)$/.exec(line);
-    const indent = match?.[1] ?? "";
-    const text = (match?.[2] ?? "").trim();
+  let listBaseDepth = 0;
+  let inFence = false;
+
+  for (const raw of outline.replace(/\r\n/g, "\n").split("\n")) {
+    const trimmed = raw.trim();
+    if (/^```/.test(trimmed)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    if (!trimmed) continue;
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) continue;
+
+    const heading = /^(#{1,6})\s+(.*)$/.exec(trimmed);
+    if (heading) {
+      const depth = heading[1].length - 1;
+      const text = stripInlineMarkdown(heading[2]);
+      if (!text) continue;
+      listBaseDepth = depth + 1;
+      parsed.push({ depth, text: clipText(text) });
+      continue;
+    }
+
+    const list = /^(\s*)(?:[-*•+]|\d+[.)])\s+(.*)$/.exec(raw);
+    if (list) {
+      const indentDepth = indentLevel(list[1]);
+      const text = stripInlineMarkdown(list[2]);
+      if (!text) continue;
+      parsed.push({ depth: listBaseDepth + indentDepth, text: clipText(text) });
+      continue;
+    }
+
+    // Whimsical mind-map paste-special: plain indented lines, no markers.
+    const plain = /^(\s*)(.*)$/.exec(raw);
+    const text = stripInlineMarkdown(plain?.[2] ?? "");
     if (!text) continue;
-    const depth = indent.includes("\t")
-      ? indent.split("\t").length - 1
-      : Math.floor(indent.length / 2);
-    parsed.push({ depth, text: Array.from(text).slice(0, MAX_TEXT).join("") });
+    listBaseDepth = 0;
+    parsed.push({ depth: indentLevel(plain?.[1] ?? ""), text: clipText(text) });
   }
+
   if (!parsed.length) return [];
   const min = Math.min(...parsed.map((line) => line.depth));
-  return parsed.map((line) => ({ depth: line.depth - min, text: line.text }));
+  return parsed.map((line) => ({ depth: Math.max(0, line.depth - min), text: line.text }));
 }
 
 export function toOutline(doc: MindMapDocument): string {
@@ -42,4 +75,28 @@ export function toOutline(doc: MindMapDocument): string {
     walk(node.id, 0);
   }
   return lines.join("\n").trim();
+}
+
+function indentLevel(indent: string): number {
+  if (!indent) return 0;
+  if (indent.includes("\t")) return indent.split("\t").length - 1;
+  // Two spaces (or one tab) = one hierarchy step. Four-space Markdown nests
+  // still work because depths may skip (0, 2, 4) while parent stacking stays valid.
+  const spaces = indent.replace(/\t/g, "  ").length;
+  return Math.floor(spaces / 2);
+}
+
+function stripInlineMarkdown(value: string): string {
+  return value
+    .replace(/!\[[^\]]*]\([^)]*\)/g, "")
+    .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
+    .replace(/(\*\*|__)(.*?)\1/g, "$2")
+    .replace(/(\*|_)(.*?)\1/g, "$2")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^>\s+/, "")
+    .trim();
+}
+
+function clipText(value: string): string {
+  return Array.from(value).slice(0, MAX_TEXT).join("");
 }

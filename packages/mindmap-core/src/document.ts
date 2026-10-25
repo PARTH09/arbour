@@ -1,7 +1,14 @@
 import { createNodeId, treeEdgeId } from "./ids";
 import { sanitizeHref, sanitizeHttpUrl } from "./security";
 import { layoutDocument } from "./layout";
-import { defaultEdgeStyle, defaultLayout, measureNode, rootStyle, styleForChild } from "./styles";
+import {
+  defaultEdgeStyle,
+  defaultLayout,
+  measureNode,
+  repairTopicFill,
+  rootStyle,
+  styleForChild,
+} from "./styles";
 import {
   MAX_EMOJI,
   MAX_NODES,
@@ -74,6 +81,7 @@ export function finalizeNode(node: MindNode): MindNode {
       .slice(0, MAX_TAGS),
     href: sanitizeHref(node.href),
     imageUrl: sanitizeHttpUrl(node.imageUrl),
+    style: repairTopicFill(node.style, node.nodeType),
   };
   const size = measureNode(next);
   next.width = size.width;
@@ -386,6 +394,20 @@ function clip(value: string, max: number): string {
 
 export function edgeList(doc: MindMapDocument): MindEdge[] {
   return Object.values(doc.edges);
+}
+
+/** Soft-fill topics that still have pure white backgrounds from older saves. */
+export function refreshDocumentStyles(doc: MindMapDocument): MindMapDocument {
+  let changed = false;
+  const nodes = { ...doc.nodes };
+  for (const node of Object.values(doc.nodes)) {
+    const style = repairTopicFill(node.style, node.nodeType);
+    if (style.background !== node.style.background) {
+      nodes[node.id] = { ...node, style };
+      changed = true;
+    }
+  }
+  return changed ? { ...doc, nodes } : doc;
 }
 
 export function normalizeDocument(

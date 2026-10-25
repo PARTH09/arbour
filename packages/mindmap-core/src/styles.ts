@@ -84,8 +84,8 @@ export interface MapTheme {
 /**
  * Style precedence, applied in this order:
  * 1. Document theme writes unlocked nodes.
- * 2. A new child copies its parent's fill, border color, and font.
- *    Children of the central topic take the next branch color and soft fill.
+ * 2. A new child of the central topic takes the next branch color and soft fill.
+ *    Deeper children inherit that branch fill and border (never pure white).
  * 3. A manual edit sets `themeLock`, so later themes leave that node alone.
  * Tree connectors follow the target border color until their own color is set.
  */
@@ -93,7 +93,7 @@ export const THEMES: MapTheme[] = [
   {
     id: "grove",
     name: "Grove",
-    description: "Ink center, paper topics, branch colors",
+    description: "Ink center with soft branch fills",
     root: {
       shape: "rounded",
       background: "#1c1917",
@@ -135,20 +135,20 @@ export const THEMES: MapTheme[] = [
   {
     id: "paper",
     name: "Paper",
-    description: "Quiet stone outlines",
+    description: "Warm sand topics, quiet outlines",
     root: {
-      background: "#ffffff",
+      background: "#f4efe4",
       color: "#1c1917",
       borderColor: "#1c1917",
     },
     branch: {
-      background: "#ffffff",
+      background: "#f4efe4",
       color: "#1c1917",
-      borderColor: "#d6d3d1",
+      borderColor: "#a8a29e",
       shadow: "soft",
     },
     note: {
-      background: "#fafaf9",
+      background: "#faf0d8",
       color: "#1c1917",
       borderColor: "#d6d3d1",
     },
@@ -156,19 +156,19 @@ export const THEMES: MapTheme[] = [
   {
     id: "dusk",
     name: "Dusk",
-    description: "Indigo center and bright branches",
+    description: "Indigo center and soft violet branches",
     root: {
       background: "#312e81",
       color: "#eef2ff",
       borderColor: "#312e81",
     },
     branch: {
-      background: "#ffffff",
+      background: "#eef2ff",
       color: "#1e1b4b",
       shadow: "soft",
     },
     note: {
-      background: "#eef2ff",
+      background: "#e0e7ff",
       color: "#1e1b4b",
       borderColor: "#a5b4fc",
     },
@@ -236,6 +236,30 @@ export function defaultEdgeStyle(stroke: string, kind: "tree" | "link"): EdgeSty
   };
 }
 
+export function isWhiteFill(value: string | null | undefined): boolean {
+  const next = (value || "").trim().toLowerCase().replace(/\s/g, "");
+  return (
+    !next ||
+    next === "#fff" ||
+    next === "#ffffff" ||
+    next === "white" ||
+    next === "rgb(255,255,255)" ||
+    next === "rgba(255,255,255,1)"
+  );
+}
+
+export function fillForBorder(borderColor: string): string {
+  const index = (BRANCH_COLORS as readonly string[]).indexOf(borderColor);
+  return BRANCH_FILLS[index >= 0 ? index : 0];
+}
+
+/** Replace pure-white topic fills with the soft fill that matches the border. */
+export function repairTopicFill(style: NodeStyle, nodeType: NodeType): NodeStyle {
+  if (nodeType !== "topic") return style;
+  if (!isWhiteFill(style.background)) return style;
+  return { ...style, background: fillForBorder(style.borderColor) };
+}
+
 export function styleForChild(
   parent: MindNode,
   isRootChild: boolean,
@@ -245,9 +269,17 @@ export function styleForChild(
   const style = defaultTopicStyle();
   style.fontFamily = parent.style.fontFamily;
   style.fontSize = isRootChild ? 14 : parent.style.fontSize;
-  const colorIndex = rootChildIndex % BRANCH_COLORS.length;
-  style.borderColor = BRANCH_COLORS[colorIndex];
-  style.background = BRANCH_FILLS[colorIndex];
+
+  if (isRootChild) {
+    const colorIndex = rootChildIndex % BRANCH_COLORS.length;
+    style.borderColor = BRANCH_COLORS[colorIndex];
+    style.background = BRANCH_FILLS[colorIndex];
+  } else {
+    style.borderColor = parent.style.borderColor;
+    style.background = isWhiteFill(parent.style.background)
+      ? fillForBorder(parent.style.borderColor)
+      : parent.style.background;
+  }
 
   if (nodeType === "note") {
     style.background = "#fff7d6";

@@ -383,6 +383,10 @@ function CanvasMenu({ menu, onClose }: { menu: { x: number; y: number; nodeId?: 
     ? [
         { label: "Add child", action: () => dispatch({ type: "addChild", parentId: node.id }, { edit: true }) },
         { label: "Add sibling", action: () => dispatch({ type: "addSibling", nodeId: node.id }, { edit: true }) },
+        { label: "Add sibling above", action: () => dispatch({ type: "addSibling", nodeId: node.id, placement: "above" }, { edit: true }) },
+        ...(node.id !== document.rootId
+          ? [{ label: "Add parent", action: () => dispatch({ type: "addParent", nodeId: node.id }, { edit: true }) }]
+          : []),
         { label: "Duplicate", action: () => dispatch({ type: "duplicate", nodeId: node.id }) },
         ...(childrenOf(document, node.id).length
           ? [{ label: node.collapsed ? "Expand branch" : "Collapse branch", action: () => dispatch({ type: "toggleCollapse", nodeId: node.id }) }]

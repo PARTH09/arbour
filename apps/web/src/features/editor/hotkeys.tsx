@@ -5,6 +5,7 @@ import {
   childrenOf,
   isNodeVisible,
   nearestInDirection,
+  sanitizeHref,
   type MindMapDocument,
   type SubtreeSnapshot,
 } from "@arbour/mindmap-core";
@@ -19,6 +20,7 @@ let clipboard: { snapshot: SubtreeSnapshot; outline: string } | null = null;
 export function Hotkeys() {
   const document = useActiveDocument();
   const selection = useEditor((state) => state.selection);
+  const selectedEdgeId = useEditor((state) => state.selectedEdgeId);
   const dispatch = useEditor((state) => state.dispatch);
   const undo = useEditor((state) => state.undo);
   const redo = useEditor((state) => state.redo);
@@ -29,7 +31,7 @@ export function Hotkeys() {
   const setShortcutsOpen = useEditor((state) => state.setShortcutsOpen);
   const showGrid = useEditor((state) => state.showGrid);
   const toggleOutline = useEditor((state) => state.toggleOutline);
-  const { zoomIn, zoomOut, setViewport, getNodesBounds } = useReactFlow();
+  const { zoomIn, zoomOut, setViewport, getNodesBounds, screenToFlowPosition } = useReactFlow();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -51,6 +53,12 @@ export function Hotkeys() {
       if (mod && event.key === "\\") {
         event.preventDefault();
         toggleOutline();
+        return;
+      }
+      if (mod && (event.key === "/" || event.code === "Slash") && !event.shiftKey) {
+        event.preventDefault();
+        const id = selection[0] ?? document.rootId;
+        dispatch({ type: "toggleCollapse", nodeId: id });
         return;
       }
       if (event.code === "Digit1" && event.shiftKey && !mod) {
@@ -84,6 +92,19 @@ export function Hotkeys() {
         dispatch({ type: "addChild", parentId }, { edit: true });
         return;
       }
+      if (event.key === "Enter" && event.altKey && !mod) {
+        event.preventDefault();
+        const id = selection[0];
+        if (id) dispatch({ type: "addParent", nodeId: id }, { edit: true });
+        return;
+      }
+      if (event.key === "Enter" && mod) {
+        event.preventDefault();
+        const id = selection[0];
+        if (id) dispatch({ type: "addSibling", nodeId: id, placement: "above" }, { edit: true });
+        else dispatch({ type: "addChild", parentId: document.rootId }, { edit: true });
+        return;
+      }
       if (event.key === "Enter" && !mod) {
         event.preventDefault();
         const id = selection[0];
@@ -98,6 +119,10 @@ export function Hotkeys() {
       }
       if ((event.key === "Backspace" || event.key === "Delete") && !mod) {
         event.preventDefault();
+        if (selectedEdgeId) {
+          dispatch({ type: "deleteEdges", ids: [selectedEdgeId] });
+          return;
+        }
         if (selection.length) dispatch({ type: "deleteNodes", ids: selection });
         return;
       }
@@ -121,6 +146,16 @@ export function Hotkeys() {
         setSelection(Object.values(document.nodes).filter((node) => isNodeVisible(document, node.id)).map((node) => node.id));
         return;
       }
+      if (mod && event.shiftKey && event.key.toLowerCase() === "u") {
+        event.preventDefault();
+        const id = selection[0];
+        if (!id || !document.nodes[id]) return;
+        const current = document.nodes[id].href ?? "";
+        const next = window.prompt("Add a link (https://… or leave blank to clear)", current);
+        if (next == null) return;
+        dispatch({ type: "patchNodes", ids: [id], href: sanitizeHref(next.trim() || null) });
+        return;
+      }
       if (mod && event.key.toLowerCase() === "c") {
         const id = selection[0];
         const snapshot = id ? captureSubtree(document, id) : null;
@@ -130,9 +165,30 @@ export function Hotkeys() {
         void navigator.clipboard?.writeText(outline).catch(() => undefined);
         return;
       }
+      if (mod && event.key.toLowerCase() === "v" && event.shiftKey) {
+        event.preventDefault();
+        void pasteOutlineOnly(selection[0] ?? document.rootId);
+        return;
+      }
       if (mod && event.key.toLowerCase() === "v") {
         event.preventDefault();
         void paste(document, selection[0] ?? document.rootId);
+        return;
+      }
+      if (!mod && !event.altKey && event.key.toLowerCase() === "m") {
+        event.preventDefault();
+        const position = screenToFlowPosition({
+          x: window.innerWidth / 2,
+          y: window.innerHeight / 2,
+        });
+        dispatch(
+          {
+            type: "addFloating",
+            position: { x: position.x - 40, y: position.y - 20 },
+            text: "New topic",
+          },
+          { edit: true },
+        );
         return;
       }
       if (event.key.startsWith("Arrow")) {
@@ -157,7 +213,26 @@ export function Hotkeys() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [dispatch, document, getNodesBounds, redo, selection, setSelection, setShortcutsOpen, setTool, setViewport, showGrid, startEditing, stopEditing, toggleOutline, undo, zoomIn, zoomOut]);
+  }, [
+    dispatch,
+    document,
+    getNodesBounds,
+    redo,
+    screenToFlowPosition,
+    selectedEdgeId,
+    selection,
+    setSelection,
+    setShortcutsOpen,
+    setTool,
+    setViewport,
+    showGrid,
+    startEditing,
+    stopEditing,
+    toggleOutline,
+    undo,
+    zoomIn,
+    zoomOut,
+  ]);
 
   return null;
 }
@@ -176,6 +251,23 @@ async function paste(document: MindMapDocument, parentId: string) {
   }
   if (text.trim()) dispatch({ type: "pasteOutline", parentId, outline: text });
   else if (clipboard) dispatch({ type: "pasteSubtree", parentId, snapshot: clipboard.snapshot });
+}
+
+async function pasteOutlineOnly(parentId: string) {
+  let text = "";
+  try {
+    text = await navigator.clipboard.readText();
+  } catch {
+    text = "";
+  }
+  const dispatch = useEditor.getState().dispatch;
+  if (text.trim()) {
+    dispatch({ type: "pasteOutline", parentId, outline: text });
+    return;
+  }
+  if (clipboard?.outline.trim()) {
+    dispatch({ type: "pasteOutline", parentId, outline: clipboard.outline });
+  }
 }
 
 function outlineFrom(document: MindMapDocument, id: string) {

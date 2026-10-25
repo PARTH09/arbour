@@ -79,21 +79,35 @@ export function documentFromOutline(
   title?: string,
   ctx: ApplyContext = {},
 ): MindMapDocument | null {
-  const rawLines = outline
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .filter((line) => line.trim());
-  if (!rawLines.length) return null;
-  const first = rawLines[0].replace(/^(\s*)(?:[-*•]\s+)?/, "").trim() || "Imported outline";
+  const lines = parseOutline(outline);
+  if (!lines.length) return null;
+  const rootText = lines[0].text || "Imported outline";
   let doc = createDocument({
-    title: title?.trim() || first,
-    rootText: first,
+    title: title?.trim() || rootText,
+    rootText,
     createId: ctx.createId,
     now: ctx.now?.(),
   });
-  const rest = rawLines.slice(1).join("\n");
-  if (!rest.trim()) return doc;
-  doc = applyCommand(doc, { type: "pasteOutline", parentId: doc.rootId, outline: rest }, ctx).document;
+  const rest = lines.slice(1);
+  if (!rest.length) return doc;
+  // Build under the new root from already-parsed depths (avoid re-indent round-trip).
+  const relative = rest
+    .map((line) => ({ depth: Math.max(0, line.depth - 1), text: line.text }))
+    .slice(0, MAX_NODES);
+  const mutationCtx: MutationContext = {
+    createId: ctx.createId ?? createNodeId,
+    now: ctx.now ?? (() => new Date().toISOString()),
+  };
+  if (Object.keys(doc.nodes).length + relative.length > MAX_NODES) return null;
+  const stack: { depth: number; id: string }[] = [{ depth: -1, id: doc.rootId }];
+  for (const line of relative) {
+    while (stack.length > 1 && stack[stack.length - 1].depth >= line.depth) stack.pop();
+    const parent = stack[stack.length - 1]?.id ?? doc.rootId;
+    const id = insertChild(doc, parent, { text: line.text }, mutationCtx);
+    if (!id) return null;
+    stack.push({ depth: line.depth, id });
+  }
+  finish(doc);
   return doc;
 }
 
@@ -105,6 +119,8 @@ function mutate(doc: MindMapDocument, command: Command, ctx: MutationContext): M
       return addChild(doc, command, ctx);
     case "addSibling":
       return addSibling(doc, command, ctx);
+    case "addParent":
+      return addParent(doc, command, ctx);
     case "addFloating":
       return addFloating(doc, command, ctx);
     case "deleteNodes":
@@ -177,13 +193,17 @@ function addSibling(
 ): MutationResult {
   const node = doc.nodes[command.nodeId];
   if (!node) return { changed: false };
+  const placeAbove = command.placement === "above";
   if (!node.parentId || node.id === doc.rootId) {
     if (node.floating) {
       return addFloating(
         doc,
         {
           type: "addFloating",
-          position: { x: node.position.x + 36, y: node.position.y + node.height + 28 },
+          position: {
+            x: node.position.x + 36,
+            y: placeAbove ? node.position.y - node.height - 28 : node.position.y + node.height + 28,
+          },
           text: command.text,
           nodeType: command.nodeType,
         },
@@ -197,12 +217,76 @@ function addSibling(
   const id = insertChild(
     doc,
     node.parentId,
-    { text: command.text, nodeType: command.nodeType, side: node.side, index: index + 1 },
+    {
+      text: command.text,
+      nodeType: command.nodeType,
+      side: node.side,
+      index: placeAbove ? index : index + 1,
+    },
     ctx,
   );
   if (!id) return { changed: false, error: LIMIT_ERROR };
   finish(doc);
   return { changed: true, focusId: id };
+}
+
+function addParent(
+  doc: MindMapDocument,
+  command: Extract<Command, { type: "addParent" }>,
+  ctx: MutationContext,
+): MutationResult {
+  const node = doc.nodes[command.nodeId];
+  if (!node) return { changed: false };
+  if (node.id === doc.rootId) {
+    return { changed: false, error: "The central topic already sits at the top of the map." };
+  }
+
+  if (node.floating || !node.parentId) {
+    const parentResult = addFloating(
+      doc,
+      {
+        type: "addFloating",
+        position: { x: node.position.x, y: node.position.y - node.height - 48 },
+        text: command.text,
+        nodeType: command.nodeType,
+      },
+      ctx,
+    );
+    if (!parentResult.changed || !parentResult.focusId) return parentResult;
+    const moved = reparent(doc, {
+      type: "reparent",
+      nodeId: node.id,
+      parentId: parentResult.focusId,
+      index: 0,
+      side: node.side,
+    });
+    if (!moved.changed) return moved;
+    return { changed: true, focusId: parentResult.focusId };
+  }
+
+  const siblings = childrenOf(doc, node.parentId);
+  const index = siblings.findIndex((item) => item.id === node.id);
+  const parentId = insertChild(
+    doc,
+    node.parentId,
+    {
+      text: command.text,
+      nodeType: command.nodeType,
+      side: node.side,
+      index,
+    },
+    ctx,
+  );
+  if (!parentId) return { changed: false, error: LIMIT_ERROR };
+  const moved = reparent(doc, {
+    type: "reparent",
+    nodeId: node.id,
+    parentId,
+    index: 0,
+    side: node.side,
+  });
+  if (!moved.changed) return moved;
+  return { changed: true, focusId: parentId };
 }
 
 function addFloating(
