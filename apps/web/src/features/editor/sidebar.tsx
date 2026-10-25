@@ -44,6 +44,7 @@ export function Sidebar() {
   const createFromTemplate = useEditor((state) => state.createFromTemplate);
   const toggleFavorite = useEditor((state) => state.toggleFavorite);
   const duplicateDocument = useEditor((state) => state.duplicateDocument);
+  const renameDocument = useEditor((state) => state.renameDocument);
   const trashDocument = useEditor((state) => state.trashDocument);
   const restoreDocument = useEditor((state) => state.restoreDocument);
   const deleteForever = useEditor((state) => state.deleteForever);
@@ -236,6 +237,7 @@ export function Sidebar() {
                           onOpen={openDocument}
                           onFavorite={toggleFavorite}
                           onDuplicate={duplicateDocument}
+                          onRename={renameDocument}
                           onTrash={trashDocument}
                           onMove={moveDocumentToFolder}
                         />
@@ -261,6 +263,7 @@ export function Sidebar() {
                     onOpen={openDocument}
                     onFavorite={toggleFavorite}
                     onDuplicate={duplicateDocument}
+                    onRename={renameDocument}
                     onTrash={trashDocument}
                     onMove={moveDocumentToFolder}
                   />
@@ -284,6 +287,7 @@ export function Sidebar() {
                 onOpen={openDocument}
                 onFavorite={toggleFavorite}
                 onDuplicate={duplicateDocument}
+                onRename={renameDocument}
                 onTrash={trashDocument}
                 onMove={moveDocumentToFolder}
               />
@@ -319,6 +323,7 @@ function MapRow({
   onOpen,
   onFavorite,
   onDuplicate,
+  onRename,
   onTrash,
   onMove,
 }: {
@@ -331,17 +336,57 @@ function MapRow({
   onOpen: (id: string) => void;
   onFavorite: (id: string) => void;
   onDuplicate: (id: string) => void;
+  onRename: (id: string, title: string) => void;
   onTrash: (id: string) => void;
   onMove: (documentId: string, folderId: string | null) => void;
 }) {
   const access = memberAccess(accessState, document.id);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(document.title);
   return (
     <li>
       <div className={cn("group flex items-center rounded-lg pr-1", active && "bg-accent-soft")}>
-        <button type="button" className="min-w-0 flex-1 px-2 py-1.5 text-left" onClick={() => onOpen(document.id)}>
-          <span className="block truncate text-sm">{document.title}</span>
-          <span className="block text-[11px] text-muted">{access.role ? documentRoleLabel(access.role) : ""}</span>
-        </button>
+        {editing && access.canEdit ? (
+          <input
+            autoFocus
+            value={draft}
+            aria-label={`Rename ${document.title}`}
+            className="min-w-0 flex-1 rounded-md border border-line bg-canvas px-2 py-1 text-sm outline-none"
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={() => {
+              onRename(document.id, draft);
+              setEditing(false);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                onRename(document.id, draft);
+                setEditing(false);
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                setDraft(document.title);
+                setEditing(false);
+              }
+            }}
+            onClick={(event) => event.stopPropagation()}
+          />
+        ) : (
+          <button
+            type="button"
+            className="min-w-0 flex-1 px-2 py-1.5 text-left"
+            onClick={() => onOpen(document.id)}
+            onDoubleClick={(event) => {
+              if (!access.canEdit) return;
+              event.preventDefault();
+              event.stopPropagation();
+              setDraft(document.title);
+              setEditing(true);
+            }}
+          >
+            <span className="block truncate text-sm">{document.title}</span>
+            <span className="block text-[11px] text-muted">{access.role ? documentRoleLabel(access.role) : ""}</span>
+          </button>
+        )}
         <button
           type="button"
           aria-label={favorites.includes(document.id) ? "Remove from favorites" : "Add to favorites"}

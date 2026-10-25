@@ -40,11 +40,13 @@ export { computePositions, layoutDocument, visibleNodeBoxes } from "./layout";
 export { parseOutline, toOutline } from "./outline";
 export { documentSchema, parseDocument } from "./schema";
 export {
+  MAX_IMAGE_DATA_URL,
   escapeXml,
   mapHref,
   parseMapHref,
   sanitizeHref,
   sanitizeHttpUrl,
+  sanitizeImageUrl,
 } from "./security";
 export {
   BRANCH_COLORS,
@@ -54,12 +56,15 @@ export {
   NODE_METRICS,
   PALETTE,
   THEMES,
+  TOPIC_ICONS,
+  applyInheritedBranchStyle,
   defaultLayout,
   fillForBorder,
   fontStack,
   isWhiteFill,
   measureNode,
   repairTopicFill,
+  styleForChild,
 } from "./styles";
 export { toSvg } from "./svg";
 export { createTemplateDocument, createWelcomeDocument, listTemplates } from "./templates";

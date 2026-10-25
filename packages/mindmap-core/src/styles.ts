@@ -227,7 +227,7 @@ export function defaultEdgeStyle(stroke: string, kind: "tree" | "link"): EdgeSty
     };
   }
   return {
-    path: "bezier",
+    path: "orthogonal",
     stroke,
     strokeWidth: 2,
     lineStyle: "solid",
@@ -235,6 +235,30 @@ export function defaultEdgeStyle(stroke: string, kind: "tree" | "link"): EdgeSty
     followNode: true,
   };
 }
+
+/** Curated topic icons (emoji) for the Whimsical-style picker. */
+export const TOPIC_ICONS = [
+  "💡",
+  "🎯",
+  "✅",
+  "⭐",
+  "🔥",
+  "📌",
+  "🚀",
+  "📎",
+  "💬",
+  "🧠",
+  "📚",
+  "🛠️",
+  "⚠️",
+  "❤️",
+  "🌟",
+  "🗂️",
+  "📍",
+  "🔍",
+  "✍️",
+  "🧩",
+] as const;
 
 export function isWhiteFill(value: string | null | undefined): boolean {
   const next = (value || "").trim().toLowerCase().replace(/\s/g, "");
@@ -268,24 +292,31 @@ export function styleForChild(
 ): NodeStyle {
   const style = defaultTopicStyle();
   style.fontFamily = parent.style.fontFamily;
-  style.fontSize = isRootChild ? 14 : parent.style.fontSize;
+  style.fontSize = isRootChild ? 14 : Math.max(12, parent.style.fontSize - (parent.style.shape === "underline" ? 0 : 1));
 
   if (isRootChild) {
     const colorIndex = rootChildIndex % BRANCH_COLORS.length;
     style.borderColor = BRANCH_COLORS[colorIndex];
     style.background = BRANCH_FILLS[colorIndex];
+    style.shape = "rounded";
+    style.shadow = "soft";
   } else {
+    // Whimsical ladder: deeper topics become underline leaves on the branch color.
     style.borderColor = parent.style.borderColor;
-    style.background = isWhiteFill(parent.style.background)
-      ? fillForBorder(parent.style.borderColor)
-      : parent.style.background;
+    style.shape = "underline";
+    style.background = "transparent";
+    style.shadow = "none";
+    style.borderWidth = 1.5;
+    style.borderStyle = "solid";
   }
 
   if (nodeType === "note") {
+    style.shape = "rounded";
     style.background = "#fff7d6";
     style.borderColor = "#d6b656";
     style.textAlign = "left";
     style.fontWeight = 400;
+    style.shadow = "soft";
   } else if (nodeType === "text") {
     style.shape = "borderless";
     style.background = "transparent";
@@ -295,11 +326,34 @@ export function styleForChild(
     style.textAlign = "left";
     style.fontWeight = 400;
   } else if (nodeType === "image") {
+    style.shape = "rounded";
+    style.background = BRANCH_FILLS[0];
     style.textAlign = "left";
     style.fontSize = 13;
   }
 
   return style;
+}
+
+/** Branch paint fields inherited on reparent (skips theme-locked nodes). */
+export function applyInheritedBranchStyle(
+  node: MindNode,
+  parent: MindNode,
+  isRootChild: boolean,
+  childIndex: number,
+): NodeStyle {
+  if (node.style.themeLock) return node.style;
+  const next = styleForChild(parent, isRootChild, childIndex, node.nodeType);
+  return {
+    ...node.style,
+    shape: next.shape,
+    background: next.background,
+    borderColor: next.borderColor,
+    borderWidth: next.borderWidth,
+    borderStyle: next.borderStyle,
+    shadow: next.shadow,
+    themeLock: false,
+  };
 }
 
 export function measureNode(

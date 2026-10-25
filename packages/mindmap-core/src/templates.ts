@@ -181,7 +181,7 @@ export function createWelcomeDocument(ctx: ApplyContext = {}): MindMapDocument {
           text: "Arrange the branch",
           children: [
             { text: "Drag onto a topic to reparent" },
-            { text: "Option-drag to detach" },
+            { text: "Option-drag to duplicate" },
             { text: "Tidy layout from the toolbar" },
           ],
         },

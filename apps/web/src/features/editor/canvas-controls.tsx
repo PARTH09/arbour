@@ -2,13 +2,15 @@
 
 import { Hand, Image, MousePointer2, Spline, StickyNote, Type, ZoomIn, ZoomOut } from "lucide-react";
 import { useReactFlow } from "@xyflow/react";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
-import { sanitizeHttpUrl } from "@arbour/mindmap-core";
+import { sanitizeHttpUrl, sanitizeImageUrl } from "@arbour/mindmap-core";
 import { IconButton } from "@/components/ui/icon-button";
 import { Modal } from "@/components/ui/dialog";
 import { fitActiveDocument } from "@/features/editor/fit-document";
 import { useActiveDocument, useDocumentAccess, useEditor } from "@/features/editor/store";
+
+const MAX_UPLOAD_BYTES = 750_000;
 
 export function CanvasControls() {
   const tool = useEditor((state) => state.tool);
@@ -23,11 +25,30 @@ export function CanvasControls() {
   const [imageOpen, setImageOpen] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
   const [imageError, setImageError] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const add = (nodeType: "topic" | "note" | "text") => {
     if (!document) return;
     const parentId = selection[0] && document.nodes[selection[0]] ? selection[0] : document.rootId;
     dispatch({ type: "addChild", parentId, nodeType }, { edit: true });
+    setTool("select");
+  };
+
+  const addImageNode = (url: string, text = "Image") => {
+    if (!document) return;
+    const parentId = selection[0] && document.nodes[selection[0]] ? selection[0] : null;
+    if (parentId) {
+      dispatch({ type: "addChild", parentId, nodeType: "image", imageUrl: url, text });
+    } else {
+      const root = document.nodes[document.rootId];
+      dispatch({
+        type: "addFloating",
+        nodeType: "image",
+        imageUrl: url,
+        text,
+        position: { x: root.position.x + 160, y: root.position.y + 160 },
+      });
+    }
     setTool("select");
   };
 
@@ -85,39 +106,66 @@ export function CanvasControls() {
           Drag from one topic to another
         </p>
       ) : null}
-      <Modal open={imageOpen} onOpenChange={setImageOpen} title="Add an image" description="Paste an image link. Files stay out of the map until uploads arrive.">
+      <Modal
+        open={imageOpen}
+        onOpenChange={setImageOpen}
+        title="Add an image"
+        description="Upload a small image from this device, or paste an http(s) link."
+      >
         <form
           className="space-y-3"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!document) return;
             const url = sanitizeHttpUrl(imageUrl);
             if (!url) {
-              setImageError("Use an http or https link.");
+              setImageError("Use an http or https link, or upload a file.");
               return;
             }
-            const parentId = selection[0] && document.nodes[selection[0]] ? selection[0] : null;
-            if (parentId) {
-              dispatch({ type: "addChild", parentId, nodeType: "image", imageUrl: url, text: "Image" });
-            } else {
-              const root = document.nodes[document.rootId];
-              dispatch({
-                type: "addFloating",
-                nodeType: "image",
-                imageUrl: url,
-                text: "Image",
-                position: { x: root.position.x + 160, y: root.position.y + 160 },
-              });
-            }
+            addImageNode(url);
             setImageUrl("");
             setImageOpen(false);
           }}
         >
           <input
+            ref={fileInput}
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            className="hidden"
+            onChange={async (event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (!file) return;
+              if (file.size > MAX_UPLOAD_BYTES) {
+                setImageError("Keep uploads under 750 KB so maps stay light in this browser.");
+                return;
+              }
+              try {
+                const dataUrl = await readFileAsDataUrl(file);
+                const safe = sanitizeImageUrl(dataUrl);
+                if (!safe) {
+                  setImageError("That image type isn't supported.");
+                  return;
+                }
+                addImageNode(safe, file.name.replace(/\.[^.]+$/, "") || "Image");
+                setImageUrl("");
+                setImageOpen(false);
+              } catch {
+                setImageError("This browser could not read that file.");
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="flex h-9 w-full items-center justify-center rounded-lg border border-dashed border-line text-sm hover:bg-accent-soft"
+            onClick={() => fileInput.current?.click()}
+          >
+            Upload from this device
+          </button>
+          <input
             autoFocus
             value={imageUrl}
             onChange={(event) => setImageUrl(event.target.value)}
-            placeholder="https://"
+            placeholder="https://… or leave blank and upload"
             aria-label="Image link"
             className="h-9 w-full rounded-lg border border-line bg-canvas px-3 text-sm outline-none"
           />
@@ -127,13 +175,22 @@ export function CanvasControls() {
               Cancel
             </button>
             <button type="submit" className="h-8 rounded-lg bg-accent px-3 text-sm text-white">
-              Add image
+              Add link
             </button>
           </div>
         </form>
       </Modal>
     </>
   );
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error ?? new Error("read failed"));
+    reader.readAsDataURL(file);
+  });
 }
 
 function ToolButton({

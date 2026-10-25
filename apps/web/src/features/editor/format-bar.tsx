@@ -5,12 +5,14 @@ import {
   mapHref,
   PALETTE,
   parseMapHref,
+  TOPIC_ICONS,
   type EdgeStyle,
   type NodeShape,
   type NodeStyle,
 } from "@arbour/mindmap-core";
+import { useReactFlow } from "@xyflow/react";
 import { AlignCenter, AlignLeft, AlignRight, Bold, Italic, Underline } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { useActiveDocument, useDocumentAccess, useEditor } from "@/features/editor/store";
 
@@ -23,6 +25,18 @@ const SHAPES: { id: NodeShape; label: string }[] = [
   { id: "borderless", label: "Borderless" },
 ];
 
+export type StyleClipboard = {
+  style: Partial<NodeStyle>;
+  emoji?: string;
+};
+
+/** Shared with hotkeys so Mod+Alt+C / V match the format-bar buttons. */
+export let styleClipboard: StyleClipboard | null = null;
+
+export function setStyleClipboard(next: StyleClipboard | null) {
+  styleClipboard = next;
+}
+
 export function FormatBar() {
   const document = useActiveDocument();
   const documents = useEditor((state) => state.documents);
@@ -31,24 +45,77 @@ export function FormatBar() {
   const dispatch = useEditor((state) => state.dispatch);
   const access = useDocumentAccess();
   const [details, setDetails] = useState(false);
+  const [iconsOpen, setIconsOpen] = useState(false);
+  const [styleCopied, setStyleCopied] = useState(false);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const [anchor, setAnchor] = useState<{ left: number; top: number } | null>(null);
+  const { flowToScreenPosition } = useReactFlow();
+
+  const edge = selectedEdgeId && document ? document.edges[selectedEdgeId] : undefined;
+  const nodes = document ? selection.map((id) => document.nodes[id]).filter(Boolean) : [];
+
+  const firstSelected = nodes[0];
+  const anchorKey = firstSelected
+    ? `${firstSelected.id}:${firstSelected.position.x}:${firstSelected.position.y}:${firstSelected.width}`
+    : "";
+
+  useEffect(() => {
+    if (!document || !firstSelected || edge) {
+      setAnchor(null);
+      return;
+    }
+    const parent = hostRef.current?.parentElement;
+    if (!parent) return;
+    const update = () => {
+      const screen = flowToScreenPosition({
+        x: firstSelected.position.x + firstSelected.width / 2,
+        y: firstSelected.position.y,
+      });
+      const bounds = parent.getBoundingClientRect();
+      setAnchor({
+        left: screen.x - bounds.left,
+        top: Math.max(8, screen.y - bounds.top - 12),
+      });
+    };
+    update();
+    const frame = window.requestAnimationFrame(update);
+    return () => window.cancelAnimationFrame(frame);
+  }, [anchorKey, document, edge, firstSelected, flowToScreenPosition]);
+
   if (!document || !access.canEdit) return null;
-  const edge = selectedEdgeId ? document.edges[selectedEdgeId] : undefined;
-  const nodes = selection.map((id) => document.nodes[id]).filter(Boolean);
   if (!nodes.length && !edge) return null;
 
   if (edge && !nodes.length) {
     const patch = (style: Partial<EdgeStyle>) => dispatch({ type: "patchEdges", ids: [edge.id], style });
     return (
-      <div className="absolute top-3 left-1/2 z-20 flex max-w-[calc(100%-2rem)] -translate-x-1/2 flex-wrap items-center gap-1 rounded-2xl border border-line bg-panel px-2 py-1.5 shadow-lg">
+      <div
+        ref={hostRef}
+        className="absolute top-3 left-1/2 z-20 flex max-w-[calc(100%-2rem)] -translate-x-1/2 flex-wrap items-center gap-1 rounded-2xl border border-line bg-panel px-2 py-1.5 shadow-lg"
+      >
         {(["bezier", "straight", "orthogonal"] as const).map((path) => (
           <BarButton key={path} active={edge.style.path === path} onClick={() => patch({ path })}>
             {path === "bezier" ? "Curve" : path === "straight" ? "Line" : "Elbow"}
           </BarButton>
         ))}
         <Swatches value={edge.style.stroke} onChange={(stroke) => patch({ stroke })} />
-        <BarButton active={edge.style.lineStyle === "dashed"} onClick={() => patch({ lineStyle: edge.style.lineStyle === "dashed" ? "solid" : "dashed" })}>
-          Dashed
-        </BarButton>
+        <label className="flex items-center gap-1 text-[11px] text-muted">
+          Width
+          <select
+            aria-label="Stroke width"
+            className="h-7 rounded-md border border-line bg-transparent px-1 text-xs text-ink"
+            value={edge.style.strokeWidth}
+            onChange={(event) => patch({ strokeWidth: Number(event.target.value) })}
+          >
+            {[1, 1.5, 2, 3, 4].map((width) => (
+              <option key={width} value={width}>{width}</option>
+            ))}
+          </select>
+        </label>
+        {(["solid", "dashed", "dotted"] as const).map((lineStyle) => (
+          <BarButton key={lineStyle} active={edge.style.lineStyle === lineStyle} onClick={() => patch({ lineStyle })}>
+            {lineStyle === "solid" ? "Solid" : lineStyle === "dashed" ? "Dashed" : "Dotted"}
+          </BarButton>
+        ))}
         <BarButton active={edge.style.marker === "arrow"} onClick={() => patch({ marker: edge.style.marker === "arrow" ? "none" : "arrow" })}>
           Arrow
         </BarButton>
@@ -65,9 +132,34 @@ export function FormatBar() {
 
   const first = nodes[0];
   const patch = (style: Partial<NodeStyle>) => dispatch({ type: "patchNodes", ids: nodes.map((node) => node.id), style });
+  const copyStyle = () => {
+    setStyleClipboard({
+      style: { ...first.style, themeLock: true },
+      emoji: first.emoji || undefined,
+    });
+    setStyleCopied(true);
+    window.setTimeout(() => setStyleCopied(false), 1200);
+  };
+  const pasteStyle = () => {
+    if (!styleClipboard) return;
+    dispatch({
+      type: "patchNodes",
+      ids: nodes.map((node) => node.id),
+      style: styleClipboard.style,
+      emoji: styleClipboard.emoji,
+    });
+  };
 
   return (
-    <div className="absolute top-3 left-1/2 z-20 flex max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col gap-1 rounded-2xl border border-line bg-panel px-2 py-1.5 shadow-lg">
+    <div
+      ref={hostRef}
+      className="absolute z-20 flex max-w-[min(36rem,calc(100%-2rem))] flex-col gap-1 rounded-2xl border border-line bg-panel px-2 py-1.5 shadow-lg"
+      style={
+        anchor
+          ? { left: anchor.left, top: anchor.top, transform: "translate(-50%, -100%)" }
+          : { left: "50%", top: 12, transform: "translateX(-50%)" }
+      }
+    >
       <div className="flex flex-wrap items-center gap-1">
         {SHAPES.map((shape) => (
           <BarButton key={shape.id} active={first.style.shape === shape.id} onClick={() => patch({ shape: shape.id })}>
@@ -124,10 +216,48 @@ export function FormatBar() {
         <BarButton onClick={() => dispatch({ type: "paintSubtree", nodeId: first.id, borderColor: first.style.borderColor })}>
           Apply to branch
         </BarButton>
+        <BarButton label="Copy style" onClick={copyStyle}>
+          {styleCopied ? "Copied" : "Copy style"}
+        </BarButton>
+        <BarButton label="Paste style" onClick={pasteStyle}>
+          Paste style
+        </BarButton>
+        <BarButton active={iconsOpen} onClick={() => setIconsOpen((open) => !open)}>
+          Icon
+        </BarButton>
         <BarButton active={details} onClick={() => setDetails((open) => !open)}>
           Details
         </BarButton>
       </div>
+      {iconsOpen ? (
+        <div className="flex flex-wrap gap-1 border-t border-line pt-2" role="listbox" aria-label="Topic icons">
+          <button
+            type="button"
+            className="rounded-md px-2 py-1 text-xs text-muted hover:bg-accent-soft"
+            onClick={() => {
+              dispatch({ type: "patchNodes", ids: nodes.map((node) => node.id), emoji: "" });
+              setIconsOpen(false);
+            }}
+          >
+            None
+          </button>
+          {TOPIC_ICONS.map((icon) => (
+            <button
+              key={icon}
+              type="button"
+              role="option"
+              aria-selected={first.emoji === icon}
+              className={`rounded-md px-1.5 py-1 text-base hover:bg-accent-soft ${first.emoji === icon ? "bg-accent-soft ring-1 ring-accent" : ""}`}
+              onClick={() => {
+                dispatch({ type: "patchNodes", ids: nodes.map((node) => node.id), emoji: icon });
+                setIconsOpen(false);
+              }}
+            >
+              {icon}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {details ? (
         <div className="grid gap-2 border-t border-line pt-2 text-xs sm:grid-cols-2">
           <label className="flex items-center gap-2">
@@ -186,13 +316,40 @@ export function FormatBar() {
             />
           </label>
           <label className="flex items-center gap-2">
-            Emoji
+            Custom icon
             <input
               value={first.emoji}
-              aria-label="Emoji"
+              aria-label="Custom icon"
               className="h-7 w-16 rounded-md border border-line bg-transparent px-2"
               onChange={(event) => dispatch({ type: "patchNodes", ids: [first.id], emoji: event.target.value })}
             />
+          </label>
+          <label className="flex items-center gap-2">
+            Border width
+            <select
+              aria-label="Border width"
+              className="h-7 rounded-md border border-line bg-transparent px-1"
+              value={first.style.borderWidth}
+              onChange={(event) => patch({ borderWidth: Number(event.target.value) })}
+            >
+              {[0, 1, 1.5, 2, 3].map((width) => (
+                <option key={width} value={width}>{width}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2">
+            Border style
+            <select
+              aria-label="Border style"
+              className="h-7 rounded-md border border-line bg-transparent px-1"
+              value={first.style.borderStyle}
+              onChange={(event) => patch({ borderStyle: event.target.value as NodeStyle["borderStyle"] })}
+            >
+              <option value="solid">Solid</option>
+              <option value="dashed">Dashed</option>
+              <option value="dotted">Dotted</option>
+              <option value="none">None</option>
+            </select>
           </label>
           <label className="flex items-center gap-2">
             Opacity

@@ -33,7 +33,7 @@ The full local setup, including roles on this machine, is in [docs/local-setup.m
 
 - Create, rename, favorite, duplicate, trash, restore, and permanently delete maps on this device.
 - Ten templates that create editable maps.
-- Add children and siblings, promote, reparent by dragging, reorder siblings, detach with Option-drag, duplicate, and delete subtrees.
+- Add children and siblings, promote, reparent by dragging, reorder siblings, duplicate with Option-drag, detach from the context menu, and delete subtrees.
 - Paste an indented outline into the selected topic.
 - Balanced, left, right, top-down, bottom-up, and radial layouts, plus compact, comfortable, and expanded spacing.
 - Independent topic shapes, colors, type, notes, links, tags, and emoji.

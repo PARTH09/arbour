@@ -12,7 +12,8 @@ import {
 import { useReactFlow } from "@xyflow/react";
 import { useEffect } from "react";
 
-import { fitActiveDocument } from "@/features/editor/fit-document";
+import { setStyleClipboard, styleClipboard } from "@/features/editor/format-bar";
+import { fitActiveDocument, resetZoomActiveDocument } from "@/features/editor/fit-document";
 import { useActiveDocument, useEditor } from "@/features/editor/store";
 
 let clipboard: { snapshot: SubtreeSnapshot; outline: string } | null = null;
@@ -59,6 +60,26 @@ export function Hotkeys() {
         event.preventDefault();
         const id = selection[0] ?? document.rootId;
         dispatch({ type: "toggleCollapse", nodeId: id });
+        return;
+      }
+      if (!mod && !event.altKey && event.key.toLowerCase() === "v") {
+        event.preventDefault();
+        setTool("select");
+        return;
+      }
+      if (!mod && !event.altKey && !event.shiftKey && event.code === "Digit0") {
+        event.preventDefault();
+        void resetZoomActiveDocument({ setViewport, getNodesBounds }, { duration: 160 });
+        return;
+      }
+      if (!mod && !event.altKey && !event.shiftKey && event.code === "Digit1") {
+        event.preventDefault();
+        void fitActiveDocument({ setViewport, getNodesBounds }, { duration: 180 });
+        return;
+      }
+      if (!mod && !event.altKey && !event.shiftKey && event.code === "Digit2") {
+        event.preventDefault();
+        void fitActiveDocument({ setViewport, getNodesBounds }, { duration: 180, selectionOnly: true });
         return;
       }
       if (event.code === "Digit1" && event.shiftKey && !mod) {
@@ -154,6 +175,25 @@ export function Hotkeys() {
         const next = window.prompt("Add a link (https://… or leave blank to clear)", current);
         if (next == null) return;
         dispatch({ type: "patchNodes", ids: [id], href: sanitizeHref(next.trim() || null) });
+        return;
+      }
+      if (mod && event.altKey && event.key.toLowerCase() === "c") {
+        event.preventDefault();
+        const id = selection[0];
+        const node = id ? document.nodes[id] : null;
+        if (!node) return;
+        setStyleClipboard({ style: { ...node.style, themeLock: true }, emoji: node.emoji || undefined });
+        return;
+      }
+      if (mod && event.altKey && event.key.toLowerCase() === "v") {
+        event.preventDefault();
+        if (!styleClipboard || !selection.length) return;
+        dispatch({
+          type: "patchNodes",
+          ids: selection,
+          style: styleClipboard.style,
+          emoji: styleClipboard.emoji,
+        });
         return;
       }
       if (mod && event.key.toLowerCase() === "c") {

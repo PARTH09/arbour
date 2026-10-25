@@ -100,6 +100,7 @@ interface EditorState {
   createMap: (title?: string, rootText?: string) => void;
   createFromTemplate: (templateId: string) => void;
   duplicateDocument: (id: string) => void;
+  renameDocument: (id: string, title: string) => void;
   renameWorkspace: (workspaceName: string, displayName: string) => void;
   addMember: (name: string) => void;
   setWorkspaceRole: (memberId: string, role: WorkspaceRole) => void;
@@ -674,6 +675,21 @@ export const useEditor = create<EditorState>((set, get) => ({
       activeId: copy.id,
       recents: remember(state.recents, copy.id),
       ...resetSession(),
+    });
+    schedulePersist(true);
+  },
+
+  renameDocument: (id, title) => {
+    const state = get();
+    if (!memberAccess(state, id).canEdit) {
+      set({ banner: "You need edit access to rename this map." });
+      return;
+    }
+    const next = title.trim().slice(0, 120) || "Untitled map";
+    set({
+      documents: state.documents.map((document) =>
+        document.id === id ? { ...document, title: next, updatedAt: new Date().toISOString() } : document,
+      ),
     });
     schedulePersist(true);
   },

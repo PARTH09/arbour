@@ -76,8 +76,12 @@ function edgePath(
 ) {
   if (style === "straight") return `M ${sx} ${sy} L ${tx} ${ty}`;
   if (style === "orthogonal") {
-    const mid = sx + (tx - sx) / 2;
-    return `M ${sx} ${sy} L ${mid} ${sy} L ${mid} ${ty} L ${tx} ${ty}`;
+    // Short stub from the parent, then a shared vertical rail — Whimsical fork look.
+    const dx = tx - sx;
+    const stub = Math.min(28, Math.max(12, Math.abs(dx) * 0.35)) * (dx >= 0 ? 1 : -1);
+    const railX = sx + stub;
+    if (Math.abs(ty - sy) < 0.5) return `M ${sx} ${sy} L ${tx} ${ty}`;
+    return `M ${sx} ${sy} L ${railX} ${sy} L ${railX} ${ty} L ${tx} ${ty}`;
   }
   const dx = Math.max(36, Math.abs(tx - sx) * 0.45);
   const direction = tx >= sx ? 1 : -1;

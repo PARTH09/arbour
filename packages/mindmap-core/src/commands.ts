@@ -1,7 +1,7 @@
 import { createNodeId, treeEdgeId } from "./ids";
 import { layoutDocument, layoutSignature } from "./layout";
 import { parseOutline } from "./outline";
-import { defaultEdgeStyle, styleForChild, THEMES } from "./styles";
+import { applyInheritedBranchStyle, defaultEdgeStyle, fillForBorder, styleForChild, THEMES } from "./styles";
 import {
   captureSubtree,
   childrenOf,
@@ -152,7 +152,7 @@ function mutate(doc: MindMapDocument, command: Command, ctx: MutationContext): M
     case "pasteOutline":
       return pasteOutline(doc, command.parentId, command.outline, ctx);
     case "pasteSubtree":
-      return pasteSnapshot(doc, command.parentId, command.snapshot, ctx);
+      return pasteSnapshot(doc, command.parentId, command.snapshot, ctx, command.position);
     case "setLayout":
       return setLayout(doc, command.layout);
     case "relayout":
@@ -381,8 +381,25 @@ function reparent(doc: MindMapDocument, command: Extract<Command, { type: "repar
     item.sortOrder = itemIndex;
   });
   if (previousParent && previousParent !== parent.id) normalizeSiblings(doc, previousParent);
+  inheritBranchPaint(doc, node.id);
   finish(doc);
   return { changed: true, focusId: node.id };
+}
+
+/** Refresh branch fill/shape/border after a move (Whimsical-style inheritance). */
+function inheritBranchPaint(doc: MindMapDocument, nodeId: NodeId): void {
+  const node = doc.nodes[nodeId];
+  if (!node?.parentId) return;
+  const parent = doc.nodes[node.parentId];
+  if (!parent) return;
+  const siblings = childrenOf(doc, parent.id);
+  const index = siblings.findIndex((item) => item.id === node.id);
+  const isRootChild = parent.id === doc.rootId;
+  const nextStyle = applyInheritedBranchStyle(node, parent, isRootChild, Math.max(0, index));
+  if (nextStyle !== node.style) {
+    doc.nodes[nodeId] = finalizeNode({ ...node, style: nextStyle });
+  }
+  for (const child of childrenOf(doc, nodeId)) inheritBranchPaint(doc, child.id);
 }
 
 function reorder(doc: MindMapDocument, nodeId: NodeId, index: number): MutationResult {
@@ -486,10 +503,31 @@ function patchNodes(
 function paintSubtree(doc: MindMapDocument, nodeId: NodeId, borderColor: string): MutationResult {
   if (!doc.nodes[nodeId]) return { changed: false };
   let changed = false;
+  const fill = fillForBorder(borderColor);
   for (const id of subtreeIds(doc, nodeId)) {
     const node = doc.nodes[id];
-    if (!node || node.style.borderColor === borderColor) continue;
-    node.style = { ...node.style, borderColor, themeLock: true };
+    if (!node) continue;
+    const isRootChild = node.parentId === doc.rootId;
+    const background =
+      node.nodeType !== "topic"
+        ? node.style.background
+        : isRootChild
+          ? fill
+          : node.style.shape === "underline" || node.style.shape === "borderless"
+            ? "transparent"
+            : fill;
+    if (
+      node.style.borderColor === borderColor &&
+      node.style.background === background
+    ) {
+      continue;
+    }
+    node.style = {
+      ...node.style,
+      borderColor,
+      background,
+      themeLock: true,
+    };
     changed = true;
   }
   if (!changed) return { changed: false };

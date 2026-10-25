@@ -16,7 +16,7 @@ import { createHistory, historyCommit, historyRedo, historyUndo } from "./histor
 import { visibleNodeBoxes } from "./layout";
 import { parseOutline, toOutline } from "./outline";
 import { parseDocument } from "./schema";
-import { parseMapHref, sanitizeHref, sanitizeHttpUrl } from "./security";
+import { parseMapHref, sanitizeHref, sanitizeHttpUrl, sanitizeImageUrl } from "./security";
 import { BRANCH_COLORS, BRANCH_FILLS, THEMES } from "./styles";
 import { toSvg } from "./svg";
 import { createTemplateDocument, createWelcomeDocument, listTemplates } from "./templates";
@@ -115,7 +115,29 @@ describe("hierarchy", () => {
 
     const leaf = run(doc, { type: "addChild", parentId: created[0], text: "Leaf" }, context);
     expect(leaf.document.nodes[leaf.focusId!].style.borderColor).toBe(BRANCH_COLORS[0]);
-    expect(leaf.document.nodes[leaf.focusId!].style.background).toBe(BRANCH_FILLS[0]);
+    expect(leaf.document.nodes[leaf.focusId!].style.shape).toBe("underline");
+    expect(leaf.document.nodes[leaf.focusId!].style.background).toBe("transparent");
+  });
+
+  it("inherits branch color and leaf style when reparenting", () => {
+    const context = ctx();
+    let doc = map();
+    const a = run(doc, { type: "addChild", parentId: doc.rootId, text: "A" }, context);
+    doc = a.document;
+    const b = run(doc, { type: "addChild", parentId: doc.rootId, text: "B" }, context);
+    doc = b.document;
+    const leaf = run(doc, { type: "addChild", parentId: a.focusId!, text: "Leaf" }, context);
+    doc = leaf.document;
+    expect(doc.nodes[leaf.focusId!].style.borderColor).toBe(BRANCH_COLORS[0]);
+
+    const moved = run(
+      doc,
+      { type: "reparent", nodeId: leaf.focusId!, parentId: b.focusId! },
+      context,
+    );
+    expect(moved.document.nodes[leaf.focusId!].style.borderColor).toBe(BRANCH_COLORS[1]);
+    expect(moved.document.nodes[leaf.focusId!].style.shape).toBe("underline");
+    expect(moved.document.nodes[leaf.focusId!].style.background).toBe("transparent");
   });
 
   it("repairs white topic fills from older documents", () => {
@@ -337,6 +359,8 @@ describe("hierarchy", () => {
     expect(sanitizeHttpUrl("javascript:alert(1)")).toBeNull();
     expect(sanitizeHttpUrl("https://user:pass@example.com/a.png")).toBeNull();
     expect(sanitizeHttpUrl("https://example.com/a.png")).toBe("https://example.com/a.png");
+    expect(sanitizeImageUrl("data:image/png;base64,abc=")).toBe("data:image/png;base64,abc=");
+    expect(sanitizeImageUrl("data:text/html;base64,abc=")).toBeNull();
     expect(sanitizeHref("arbour:map:11111111-1111-4111-8111-111111111111")).toBe(
       "arbour:map:11111111-1111-4111-8111-111111111111",
     );

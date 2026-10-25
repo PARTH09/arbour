@@ -52,7 +52,7 @@ const nodeSchema = z.object({
   href: z.string().max(2000).nullable(),
   tags: z.array(z.string().max(24)).max(8),
   emoji: z.string().max(16),
-  imageUrl: z.string().max(2000).nullable(),
+  imageUrl: z.string().max(1_000_000).nullable(),
 });
 
 const edgeSchema = z.object({

@@ -126,7 +126,7 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
         aria-label={`${node.text} topic`}
       >
         {node.imageUrl ? (
-          // External image URLs are validated as http(s) before they are stored.
+          // Image URLs are sanitized to http(s) or small data:image uploads before storage.
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={node.imageUrl}
@@ -168,6 +168,14 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
               } else if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 dispatch({ type: "addSibling", nodeId: id }, { edit: true, selectAll: true });
+              } else if (mod && (event.key === "]" || event.key === "[")) {
+                event.preventDefault();
+                const next = indentText(draft, event.key === "]", field.current?.selectionStart ?? 0, field.current?.selectionEnd ?? 0);
+                setDraft(next.text);
+                dispatch({ type: "rename", nodeId: id, text: next.text }, { coalesceKey: `rename:${id}` });
+                requestAnimationFrame(() => {
+                  field.current?.setSelectionRange(next.selectionStart, next.selectionEnd);
+                });
               } else if (event.key === "Tab" && !event.shiftKey) {
                 event.preventDefault();
                 dispatch({ type: "addChild", parentId: id }, { edit: true, selectAll: true });
@@ -304,6 +312,50 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
       <Handle id="source-bottom" type="source" position={Position.Bottom} className={cn(handleClass, data.connecting && "!opacity-100")} />
     </div>
   );
+}
+
+function indentText(text: string, indent: boolean, selectionStart: number, selectionEnd: number) {
+  const step = "  ";
+  const lineStart = text.lastIndexOf("\n", Math.max(0, selectionStart - 1)) + 1;
+  const lineEndIndex = text.indexOf("\n", selectionEnd);
+  const lineEnd = lineEndIndex === -1 ? text.length : lineEndIndex;
+  const block = text.slice(lineStart, lineEnd);
+  const lines = block.split("\n");
+  let removed = 0;
+  let added = 0;
+  const nextLines = lines.map((line) => {
+    if (indent) {
+      added += step.length;
+      return `${step}${line}`;
+    }
+    if (line.startsWith(step)) {
+      removed += step.length;
+      return line.slice(step.length);
+    }
+    if (line.startsWith("\t")) {
+      removed += 1;
+      return line.slice(1);
+    }
+    if (line.startsWith(" ")) {
+      removed += 1;
+      return line.slice(1);
+    }
+    return line;
+  });
+  const nextBlock = nextLines.join("\n");
+  const nextText = `${text.slice(0, lineStart)}${nextBlock}${text.slice(lineEnd)}`;
+  const firstLineChange = indent
+    ? step.length
+    : lines[0]?.startsWith(step)
+      ? -step.length
+      : lines[0]?.startsWith("\t") || lines[0]?.startsWith(" ")
+        ? -1
+        : 0;
+  return {
+    text: nextText,
+    selectionStart: Math.max(lineStart, selectionStart + firstLineChange),
+    selectionEnd: Math.max(lineStart, selectionEnd + (indent ? added : -removed)),
+  };
 }
 
 function addControlStyle(direction: TopicFlowNode["data"]["chevron"], hasChildren: boolean) {

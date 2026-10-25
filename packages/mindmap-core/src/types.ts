@@ -198,7 +198,7 @@ export type Command =
   | { type: "addLink"; sourceId: NodeId; targetId: NodeId }
   | { type: "deleteEdges"; ids: EdgeId[] }
   | { type: "pasteOutline"; parentId: NodeId; outline: string }
-  | { type: "pasteSubtree"; parentId: NodeId; snapshot: SubtreeSnapshot }
+  | { type: "pasteSubtree"; parentId: NodeId | null; snapshot: SubtreeSnapshot; position?: Point }
   | { type: "setLayout"; layout: Partial<LayoutSettings> }
   | { type: "relayout" }
   | { type: "applyTheme"; themeId: string }

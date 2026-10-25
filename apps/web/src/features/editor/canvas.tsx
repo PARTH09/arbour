@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  captureSubtree,
   childrenOf,
   connectorHandles,
   findDropTarget,
@@ -197,7 +198,15 @@ export function Canvas() {
       x = Math.round(x / 22) * 22;
       y = Math.round(y / 22) * 22;
     }
-    const target = event.altKey ? null : findDropTarget(document, node.id, { x: x + dragged.width / 2, y: y + dragged.height / 2 });
+    // Option/Alt-drag duplicates in place; original snaps back from store.
+    if (event.altKey && !dragged.floating) {
+      const snapshot = captureSubtree(document, node.id);
+      if (snapshot) {
+        dispatch({ type: "pasteSubtree", parentId: null, snapshot, position: { x, y } });
+      }
+      return;
+    }
+    const target = findDropTarget(document, node.id, { x: x + dragged.width / 2, y: y + dragged.height / 2 });
     if (target) {
       const root = document.nodes[document.rootId];
       const side = center.x < root.position.x + root.width / 2 ? "left" : "right";
@@ -209,7 +218,7 @@ export function Canvas() {
       });
       return;
     }
-    if (event.altKey || dragged.floating) {
+    if (dragged.floating) {
       dispatch({ type: "moveFloating", nodeId: node.id, position: { x, y } });
       return;
     }
@@ -388,6 +397,17 @@ function CanvasMenu({ menu, onClose }: { menu: { x: number; y: number; nodeId?: 
           ? [{ label: "Add parent", action: () => dispatch({ type: "addParent", nodeId: node.id }, { edit: true }) }]
           : []),
         { label: "Duplicate", action: () => dispatch({ type: "duplicate", nodeId: node.id }) },
+        ...(node.id !== document.rootId && !node.floating
+          ? [{
+              label: "Detach",
+              action: () =>
+                dispatch({
+                  type: "moveFloating",
+                  nodeId: node.id,
+                  position: { x: node.position.x + 48, y: node.position.y + 48 },
+                }),
+            }]
+          : []),
         ...(childrenOf(document, node.id).length
           ? [{ label: node.collapsed ? "Expand branch" : "Collapse branch", action: () => dispatch({ type: "toggleCollapse", nodeId: node.id }) }]
           : []),

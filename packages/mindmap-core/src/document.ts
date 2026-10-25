@@ -1,5 +1,5 @@
 import { createNodeId, treeEdgeId } from "./ids";
-import { sanitizeHref, sanitizeHttpUrl } from "./security";
+import { sanitizeHref, sanitizeImageUrl } from "./security";
 import { layoutDocument } from "./layout";
 import {
   defaultEdgeStyle,
@@ -80,7 +80,7 @@ export function finalizeNode(node: MindNode): MindNode {
       .filter(Boolean)
       .slice(0, MAX_TAGS),
     href: sanitizeHref(node.href),
-    imageUrl: sanitizeHttpUrl(node.imageUrl),
+    imageUrl: sanitizeImageUrl(node.imageUrl),
     style: repairTopicFill(node.style, node.nodeType),
   };
   const size = measureNode(next);
