@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { applyCommand, documentFromOutline } from "./commands";
 import {
   childrenOf,
+  connectorHandles,
   createDocument,
   createGeneratedMap,
   documentIssues,
@@ -15,7 +16,7 @@ import { visibleNodeBoxes } from "./layout";
 import { parseOutline, toOutline } from "./outline";
 import { parseDocument } from "./schema";
 import { parseMapHref, sanitizeHref, sanitizeHttpUrl } from "./security";
-import { BRANCH_COLORS, THEMES } from "./styles";
+import { BRANCH_COLORS, BRANCH_FILLS, THEMES } from "./styles";
 import { toSvg } from "./svg";
 import { createTemplateDocument, createWelcomeDocument, listTemplates } from "./templates";
 import type { MindMapDocument } from "./types";
@@ -95,6 +96,31 @@ describe("hierarchy", () => {
       else expect(child.position.x + child.width).toBeLessThan(root.position.x);
     }
     expect(overlaps(doc)).toBe(0);
+  });
+
+  it("gives new topics distinct, non-white branch colors", () => {
+    let doc = map();
+    const context = ctx();
+    const created: string[] = [];
+    for (let index = 0; index < 3; index += 1) {
+      const next = run(doc, { type: "addChild", parentId: doc.rootId, text: `Branch ${index}` }, context);
+      doc = next.document;
+      created.push(next.focusId!);
+    }
+
+    expect(created.map((id) => doc.nodes[id].style.borderColor)).toEqual(BRANCH_COLORS.slice(0, 3));
+    expect(created.map((id) => doc.nodes[id].style.background)).toEqual(BRANCH_FILLS.slice(0, 3));
+    expect(created.every((id) => doc.nodes[id].style.background !== "#ffffff")).toBe(true);
+  });
+
+  it("can keep dense-map connectors on the right-side center handles", () => {
+    const source = { ...map().nodes.n1, position: { x: 220, y: 140 } };
+    const target = { ...map().nodes.n1, position: { x: 40, y: 80 } };
+
+    expect(connectorHandles(source, target, { preferRight: true })).toEqual({
+      sourceHandle: "source-right",
+      targetHandle: "target-left",
+    });
   });
 
   it("deletes a subtree and refuses to delete the root", () => {

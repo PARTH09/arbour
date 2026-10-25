@@ -14,6 +14,7 @@ import {
   BackgroundVariant,
   ConnectionMode,
   MiniMap,
+  PanOnScrollMode,
   ReactFlow,
   ViewportPortal,
   useReactFlow,
@@ -264,6 +265,7 @@ export function Canvas() {
         selectionOnDrag={tool === "select"}
         panOnDrag={tool === "pan" ? true : [1, 2]}
         panOnScroll
+        panOnScrollMode={PanOnScrollMode.Free}
         zoomOnScroll={false}
         panActivationKeyCode="Space"
         multiSelectionKeyCode="Shift"

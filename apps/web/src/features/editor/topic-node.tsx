@@ -76,6 +76,8 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
   const sideWidth = borderless ? 0 : style.borderWidth;
   const label = `${node.emoji ? `${node.emoji} ` : ""}${node.text}`;
   const showAdd = access.canEdit && !editing && !data.connecting;
+  const childAddStyle = addControlStyle(data.chevron, data.childCount > 0);
+  const siblingAddStyle = siblingControlStyle(data.chevron, data.childCount > 0);
 
   return (
     <div className="group relative" role="group" aria-label={`${node.text} topic`} data-testid="topic" data-topic-text={node.text}>
@@ -224,11 +226,7 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
               "nodrag nopan absolute z-20 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-panel text-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-white focus-visible:opacity-100",
               selected && "opacity-100",
             )}
-            style={{
-              right: data.childCount > 0 && data.chevron === "right" ? -30 : -12,
-              top: "50%",
-              transform: "translateY(-50%)",
-            }}
+            style={childAddStyle}
             aria-label="Add child topic"
             title="Add child"
             onPointerDown={(event) => event.stopPropagation()}
@@ -245,11 +243,7 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
               "nodrag nopan absolute z-20 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-panel text-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-white focus-visible:opacity-100",
               selected && "opacity-100",
             )}
-            style={{
-              left: "50%",
-              bottom: data.childCount > 0 && data.chevron === "down" ? -30 : -12,
-              transform: "translateX(-50%)",
-            }}
+            style={siblingAddStyle}
             aria-label="Add sibling topic"
             title="Add sibling"
             onPointerDown={(event) => event.stopPropagation()}
@@ -303,4 +297,20 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
       <Handle id="source-bottom" type="source" position={Position.Bottom} className={cn(handleClass, data.connecting && "!opacity-100")} />
     </div>
   );
+}
+
+function addControlStyle(direction: TopicFlowNode["data"]["chevron"], hasChildren: boolean) {
+  const offset = hasChildren ? -30 : -12;
+  if (direction === "left") return { left: offset, top: "50%", transform: "translateY(-50%)" };
+  if (direction === "up") return { left: "50%", top: offset, transform: "translateX(-50%)" };
+  if (direction === "down") return { left: "50%", bottom: offset, transform: "translateX(-50%)" };
+  return { right: offset, top: "50%", transform: "translateY(-50%)" };
+}
+
+function siblingControlStyle(direction: TopicFlowNode["data"]["chevron"], hasChildren: boolean) {
+  const offset = hasChildren ? -30 : -12;
+  if (direction === "up" || direction === "down") {
+    return { right: offset, top: "50%", transform: "translateY(-50%)" };
+  }
+  return { left: "50%", bottom: offset, transform: "translateX(-50%)" };
 }
