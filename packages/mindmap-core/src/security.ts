@@ -1,4 +1,5 @@
 const MAX_URL_LENGTH = 2000;
+const MAP_HREF = /^arbour:map:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 /** Allow only http(s) URLs. Imported documents must not carry scripts or credentialed URLs. */
 export function sanitizeHttpUrl(value: string | null | undefined): string | null {
@@ -16,6 +17,28 @@ export function sanitizeHttpUrl(value: string | null | undefined): string | null
   if (url.protocol !== "https:" && url.protocol !== "http:") return null;
   if (url.username || url.password) return null;
   return url.toString();
+}
+
+/**
+ * Topic links may point at http(s) sites or another map on this device via `arbour:map:<uuid>`.
+ */
+export function sanitizeHref(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > MAX_URL_LENGTH) return null;
+  const mapMatch = MAP_HREF.exec(trimmed);
+  if (mapMatch) return `arbour:map:${mapMatch[1].toLowerCase()}`;
+  return sanitizeHttpUrl(trimmed);
+}
+
+export function parseMapHref(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const match = MAP_HREF.exec(value.trim());
+  return match ? match[1].toLowerCase() : null;
+}
+
+export function mapHref(documentId: string): string {
+  return `arbour:map:${documentId}`;
 }
 
 export function escapeXml(value: string): string {

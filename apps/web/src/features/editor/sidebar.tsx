@@ -1,10 +1,11 @@
 "use client";
 
 import { documentRoleLabel, listTemplates, workspaceRoleLabel } from "@arbour/mindmap-core";
-import { Clock3, FilePlus2, Folder, Search, Star, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Clock3, FilePlus2, Folder, FolderPlus, Search, Share2, Star, Trash2 } from "lucide-react";
+import { useState } from "react";
 
 import { cn } from "@/lib/utils";
-import { memberAccess, useEditor, type LibraryView } from "@/features/editor/store";
+import { folderAccess, memberAccess, useEditor, type LibraryView } from "@/features/editor/store";
 
 const VIEWS: { id: LibraryView; label: string; icon: typeof Folder }[] = [
   { id: "home", label: "My maps", icon: Folder },
@@ -24,14 +25,22 @@ export function Sidebar() {
   const trash = useEditor((state) => state.trash);
   const favorites = useEditor((state) => state.favorites);
   const recents = useEditor((state) => state.recents);
+  const folders = useEditor((state) => state.folders);
+  const documentFolders = useEditor((state) => state.documentFolders);
   const activeId = useEditor((state) => state.activeId);
   const workspaceName = useEditor((state) => state.workspaceName);
   const displayName = useEditor((state) => state.displayName);
   const members = useEditor((state) => state.members);
   const grants = useEditor((state) => state.grants);
+  const folderGrants = useEditor((state) => state.folderGrants);
   const activeMemberId = useEditor((state) => state.activeMemberId);
   const openDocument = useEditor((state) => state.openDocument);
   const createMap = useEditor((state) => state.createMap);
+  const createFolder = useEditor((state) => state.createFolder);
+  const renameFolder = useEditor((state) => state.renameFolder);
+  const deleteFolder = useEditor((state) => state.deleteFolder);
+  const moveDocumentToFolder = useEditor((state) => state.moveDocumentToFolder);
+  const setShareFolderId = useEditor((state) => state.setShareFolderId);
   const createFromTemplate = useEditor((state) => state.createFromTemplate);
   const toggleFavorite = useEditor((state) => state.toggleFavorite);
   const duplicateDocument = useEditor((state) => state.duplicateDocument);
@@ -39,9 +48,12 @@ export function Sidebar() {
   const restoreDocument = useEditor((state) => state.restoreDocument);
   const deleteForever = useEditor((state) => state.deleteForever);
   const setSettingsOpen = useEditor((state) => state.setSettingsOpen);
+  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
 
   const needle = query.trim().toLowerCase();
-  const accessState = { members, grants, activeMemberId };
+  const accessState = { members, grants, folderGrants, documentFolders, activeMemberId };
+  const actor = members.find((member) => member.id === activeMemberId);
+  const workspaceOwner = actor?.workspaceRole === "owner";
   const allowedDocs = documents.filter((document) => memberAccess(accessState, document.id).canView);
   const visibleDocs =
     view === "favorites"
@@ -49,10 +61,17 @@ export function Sidebar() {
       : view === "recent"
         ? recents.map((id) => allowedDocs.find((document) => document.id === id)).filter((document) => document != null)
         : allowedDocs;
-  const actor = members.find((member) => member.id === activeMemberId);
   const visibleTrash = trash.filter((entry) => memberAccess(accessState, entry.document.id).canManage && entry.document.title.toLowerCase().includes(needle));
   const filteredDocs = visibleDocs.filter((document) => document.title.toLowerCase().includes(needle));
   const templates = listTemplates().filter((template) => template.title.toLowerCase().includes(needle));
+  const visibleFolders = folders.filter((folder) => {
+    if (workspaceOwner || folderAccess(accessState, folder.id).canView) return true;
+    return allowedDocs.some((document) => documentFolders[document.id] === folder.id);
+  });
+
+  const toggleFolder = (folderId: string) => {
+    setOpenFolders((current) => ({ ...current, [folderId]: !(current[folderId] ?? true) }));
+  };
 
   return (
     <aside
@@ -69,15 +88,26 @@ export function Sidebar() {
           <span className="block truncate text-xs text-muted">{workspaceName}</span>
         </button>
       </div>
-      <div className="px-3 pt-3">
+      <div className="flex gap-2 px-3 pt-3">
         <button
           type="button"
-          className="flex h-9 w-full items-center justify-center gap-2 rounded-xl bg-accent text-sm font-medium text-white hover:opacity-90"
+          className="flex h-9 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-accent text-sm font-medium text-white hover:opacity-90"
           onClick={() => createMap()}
         >
           <FilePlus2 size={15} />
           New map
         </button>
+        {workspaceOwner ? (
+          <button
+            type="button"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-line text-muted hover:bg-accent-soft hover:text-ink"
+            aria-label="New folder"
+            title="New folder"
+            onClick={() => createFolder()}
+          >
+            <FolderPlus size={15} />
+          </button>
+        ) : null}
       </div>
       <label className="mx-3 mt-3 flex h-8 items-center gap-2 rounded-lg border border-line bg-canvas px-2 text-sm">
         <Search size={14} className="text-muted" />
@@ -141,47 +171,122 @@ export function Sidebar() {
             ))}
             {visibleTrash.length === 0 ? <p className="px-2 py-3 text-xs text-muted">Trash is empty.</p> : null}
           </ul>
+        ) : view === "home" ? (
+          <div className="space-y-2">
+            {visibleFolders.map((folder) => {
+              const open = openFolders[folder.id] ?? true;
+              const folderDocs = filteredDocs.filter((document) => documentFolders[document.id] === folder.id);
+              const manage = folderAccess(accessState, folder.id).canManage;
+              if (needle && folderDocs.length === 0 && !folder.name.toLowerCase().includes(needle)) return null;
+              return (
+                <div key={folder.id} className="rounded-lg">
+                  <div className="group flex items-center gap-0.5 rounded-lg px-1 py-1 hover:bg-accent-soft">
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-1 text-left text-sm"
+                      onClick={() => toggleFolder(folder.id)}
+                      aria-expanded={open}
+                    >
+                      {open ? <ChevronDown size={14} className="shrink-0 text-muted" /> : <ChevronRight size={14} className="shrink-0 text-muted" />}
+                      <Folder size={14} className="shrink-0 text-accent" />
+                      <span
+                        className="truncate font-medium"
+                        onDoubleClick={(event) => {
+                          if (!manage) return;
+                          event.stopPropagation();
+                          const next = window.prompt("Folder name", folder.name);
+                          if (next != null) renameFolder(folder.id, next);
+                        }}
+                      >
+                        {folder.name}
+                      </span>
+                    </button>
+                    {manage ? (
+                      <>
+                        <button
+                          type="button"
+                          aria-label={`Share ${folder.name}`}
+                          className="rounded p-1 text-muted opacity-0 group-hover:opacity-100 hover:text-ink"
+                          onClick={() => setShareFolderId(folder.id)}
+                        >
+                          <Share2 size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Delete ${folder.name}`}
+                          className="rounded p-1 text-muted opacity-0 group-hover:opacity-100 hover:text-danger"
+                          onClick={() => deleteFolder(folder.id)}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                  {open ? (
+                    <ul className="ml-3 space-y-0.5 border-l border-line pl-2">
+                      {folderDocs.map((document) => (
+                        <MapRow
+                          key={document.id}
+                          document={document}
+                          active={document.id === activeId}
+                          accessState={accessState}
+                          favorites={favorites}
+                          folders={folders}
+                          folderId={folder.id}
+                          onOpen={openDocument}
+                          onFavorite={toggleFavorite}
+                          onDuplicate={duplicateDocument}
+                          onTrash={trashDocument}
+                          onMove={moveDocumentToFolder}
+                        />
+                      ))}
+                      {folderDocs.length === 0 ? <p className="px-2 py-2 text-[11px] text-muted">No maps in this folder.</p> : null}
+                    </ul>
+                  ) : null}
+                </div>
+              );
+            })}
+            <ul className="space-y-0.5">
+              {filteredDocs
+                .filter((document) => !documentFolders[document.id])
+                .map((document) => (
+                  <MapRow
+                    key={document.id}
+                    document={document}
+                    active={document.id === activeId}
+                    accessState={accessState}
+                    favorites={favorites}
+                    folders={folders}
+                    folderId={null}
+                    onOpen={openDocument}
+                    onFavorite={toggleFavorite}
+                    onDuplicate={duplicateDocument}
+                    onTrash={trashDocument}
+                    onMove={moveDocumentToFolder}
+                  />
+                ))}
+              {filteredDocs.length === 0 && visibleFolders.length === 0 ? (
+                <p className="px-2 py-3 text-xs text-muted">{needle ? "Nothing matches." : "No maps for you in this view."}</p>
+              ) : null}
+            </ul>
+          </div>
         ) : (
           <ul className="space-y-0.5">
             {filteredDocs.map((document) => (
-              <li key={document.id}>
-                <div className={cn("group flex items-center rounded-lg pr-1", document.id === activeId && "bg-accent-soft")}>
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 px-2 py-1.5 text-left"
-                    onClick={() => openDocument(document.id)}
-                  >
-                    <span className="block truncate text-sm">{document.title}</span>
-                    <span className="block text-[11px] text-muted">{roleText(accessState, document.id)}</span>
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={favorites.includes(document.id) ? "Remove from favorites" : "Add to favorites"}
-                    className={cn("rounded p-1 text-muted hover:text-ink", favorites.includes(document.id) && "text-accent")}
-                    onClick={() => toggleFavorite(document.id)}
-                  >
-                    <Star size={13} fill={favorites.includes(document.id) ? "currentColor" : "none"} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Duplicate ${document.title}`}
-                    className="rounded p-1 text-xs text-muted opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:text-ink"
-                    onClick={() => duplicateDocument(document.id)}
-                  >
-                    Copy
-                  </button>
-                  {memberAccess(accessState, document.id).canManage ? (
-                    <button
-                      type="button"
-                      aria-label={`Move ${document.title} to trash`}
-                      className="rounded p-1 text-muted opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:text-danger"
-                      onClick={() => trashDocument(document.id)}
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  ) : null}
-                </div>
-              </li>
+              <MapRow
+                key={document.id}
+                document={document}
+                active={document.id === activeId}
+                accessState={accessState}
+                favorites={favorites}
+                folders={folders}
+                folderId={documentFolders[document.id] ?? null}
+                onOpen={openDocument}
+                onFavorite={toggleFavorite}
+                onDuplicate={duplicateDocument}
+                onTrash={trashDocument}
+                onMove={moveDocumentToFolder}
+              />
             ))}
             {filteredDocs.length === 0 ? <p className="px-2 py-3 text-xs text-muted">{needle ? "Nothing matches." : "No maps for you in this view."}</p> : null}
           </ul>
@@ -204,9 +309,83 @@ export function Sidebar() {
   );
 }
 
-function roleText(state: Parameters<typeof memberAccess>[0], documentId: string) {
-  const role = memberAccess(state, documentId).role;
-  return role ? documentRoleLabel(role) : "";
+function MapRow({
+  document,
+  active,
+  accessState,
+  favorites,
+  folders,
+  folderId,
+  onOpen,
+  onFavorite,
+  onDuplicate,
+  onTrash,
+  onMove,
+}: {
+  document: { id: string; title: string };
+  active: boolean;
+  accessState: Parameters<typeof memberAccess>[0];
+  favorites: string[];
+  folders: { id: string; name: string }[];
+  folderId: string | null;
+  onOpen: (id: string) => void;
+  onFavorite: (id: string) => void;
+  onDuplicate: (id: string) => void;
+  onTrash: (id: string) => void;
+  onMove: (documentId: string, folderId: string | null) => void;
+}) {
+  const access = memberAccess(accessState, document.id);
+  return (
+    <li>
+      <div className={cn("group flex items-center rounded-lg pr-1", active && "bg-accent-soft")}>
+        <button type="button" className="min-w-0 flex-1 px-2 py-1.5 text-left" onClick={() => onOpen(document.id)}>
+          <span className="block truncate text-sm">{document.title}</span>
+          <span className="block text-[11px] text-muted">{access.role ? documentRoleLabel(access.role) : ""}</span>
+        </button>
+        <button
+          type="button"
+          aria-label={favorites.includes(document.id) ? "Remove from favorites" : "Add to favorites"}
+          className={cn("rounded p-1 text-muted hover:text-ink", favorites.includes(document.id) && "text-accent")}
+          onClick={() => onFavorite(document.id)}
+        >
+          <Star size={13} fill={favorites.includes(document.id) ? "currentColor" : "none"} />
+        </button>
+        {access.canManage && folders.length > 0 ? (
+          <select
+            aria-label={`Move ${document.title} to folder`}
+            className="max-w-16 appearance-none rounded bg-transparent text-[10px] text-muted opacity-0 group-hover:opacity-100"
+            value={folderId ?? ""}
+            onChange={(event) => onMove(document.id, event.target.value || null)}
+          >
+            <option value="">No folder</option>
+            {folders.map((folder) => (
+              <option key={folder.id} value={folder.id}>
+                {folder.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        <button
+          type="button"
+          aria-label={`Duplicate ${document.title}`}
+          className="rounded p-1 text-xs text-muted opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:text-ink"
+          onClick={() => onDuplicate(document.id)}
+        >
+          Copy
+        </button>
+        {access.canManage ? (
+          <button
+            type="button"
+            aria-label={`Move ${document.title} to trash`}
+            className="rounded p-1 text-muted opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:text-danger"
+            onClick={() => onTrash(document.id)}
+          >
+            <Trash2 size={13} />
+          </button>
+        ) : null}
+      </div>
+    </li>
+  );
 }
 
 function Logo() {

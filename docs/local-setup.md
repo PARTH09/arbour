@@ -55,16 +55,18 @@ Run these from the repository root.
 | `npm run build` | Production build of the web app |
 | `npm start` | Serve the production build. Run `npm run build` first. |
 
-## Try roles on this machine
+## Try roles and folders on this machine
 
 The name at the bottom of the library opens people and roles.
 
 1. Add a person. They start as a workspace member.
-2. Open a map and choose **Share**.
-3. Give that person **Viewer**, **Editor**, or **Owner** on that map.
+2. Open a map and choose **Share**, or create a folder with the folder button and share the folder.
+3. Give that person **Viewer**, **Editor**, or **Owner** on the map or folder.
 4. In the people dialog, choose **Use Arbour as** that person.
 
-A viewer can look through the map and export it. An editor can change topics, layout, and undo. An owner of a map can also share it and move it to trash. A workspace owner can see every map and add or remove people. The workspace keeps at least one owner.
+A viewer can look through the map and export it. An editor can change topics, layout, and undo. An owner of a map can also share it and move it to trash. Folder access applies to every map inside that folder. A workspace owner can see every map and add or remove people. The workspace keeps at least one owner.
+
+On the canvas, two-finger trackpad movement pans the map. Hover a topic and use the **+** buttons for a child (right) or sibling (bottom). Topic details can link to a website or another map on this device.
 
 Anyone using this browser can switch person. Sign-in is not part of the local app.
 

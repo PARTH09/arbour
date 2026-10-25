@@ -14,7 +14,7 @@ import { createHistory, historyCommit, historyRedo, historyUndo } from "./histor
 import { visibleNodeBoxes } from "./layout";
 import { parseOutline, toOutline } from "./outline";
 import { parseDocument } from "./schema";
-import { sanitizeHttpUrl } from "./security";
+import { parseMapHref, sanitizeHref, sanitizeHttpUrl } from "./security";
 import { BRANCH_COLORS, THEMES } from "./styles";
 import { toSvg } from "./svg";
 import { createTemplateDocument, createWelcomeDocument, listTemplates } from "./templates";
@@ -188,6 +188,13 @@ describe("hierarchy", () => {
     expect(sanitizeHttpUrl("javascript:alert(1)")).toBeNull();
     expect(sanitizeHttpUrl("https://user:pass@example.com/a.png")).toBeNull();
     expect(sanitizeHttpUrl("https://example.com/a.png")).toBe("https://example.com/a.png");
+    expect(sanitizeHref("arbour:map:11111111-1111-4111-8111-111111111111")).toBe(
+      "arbour:map:11111111-1111-4111-8111-111111111111",
+    );
+    expect(parseMapHref("arbour:map:11111111-1111-4111-8111-111111111111")).toBe(
+      "11111111-1111-4111-8111-111111111111",
+    );
+    expect(sanitizeHref("javascript:alert(1)")).toBeNull();
     const patched = run(
       doc,
       { type: "patchNodes", ids: [parent.focusId!], href: "javascript:alert(1)" },

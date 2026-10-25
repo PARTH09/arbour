@@ -11,13 +11,16 @@ import {
   documentIssues,
   documentSchema,
   effectiveDocumentRole,
+  effectiveFolderRole,
   layoutDocument,
   normalizeDocument,
   type AccessGrant,
   type AccessMember,
   type Command,
   type DocumentRole,
+  type FolderGrant,
   type MindMapDocument,
+  type WorkspaceFolder,
   type WorkspaceRole,
 } from "@arbour/mindmap-core";
 import { create } from "zustand";
@@ -52,7 +55,11 @@ interface EditorState {
   workspaceName: string;
   members: AccessMember[];
   grants: AccessGrant[];
+  folders: WorkspaceFolder[];
+  folderGrants: FolderGrant[];
+  documentFolders: Record<string, string>;
   activeMemberId: string;
+  shareFolderId: string | null;
   theme: "light" | "dark";
   sidebarCollapsed: boolean;
   showMinimap: boolean;
@@ -97,6 +104,12 @@ interface EditorState {
   setWorkspaceRole: (memberId: string, role: WorkspaceRole) => void;
   removeMember: (memberId: string) => void;
   setDocumentRole: (documentId: string, memberId: string, role: DocumentRole | "none") => void;
+  createFolder: (name?: string) => void;
+  renameFolder: (folderId: string, name: string) => void;
+  deleteFolder: (folderId: string) => void;
+  moveDocumentToFolder: (documentId: string, folderId: string | null) => void;
+  setFolderRole: (folderId: string, memberId: string, role: DocumentRole | "none") => void;
+  setShareFolderId: (folderId: string | null) => void;
   switchMember: (memberId: string) => void;
   toggleFavorite: (id: string) => void;
   trashDocument: (id: string) => void;
@@ -144,6 +157,9 @@ function serialize(state: EditorState) {
     workspaceName: state.workspaceName,
     members: state.members,
     grants: state.grants,
+    folders: state.folders,
+    folderGrants: state.folderGrants,
+    documentFolders: state.documentFolders,
     activeMemberId: state.activeMemberId,
     theme: state.theme,
     sidebarCollapsed: state.sidebarCollapsed,
@@ -199,9 +215,31 @@ function resetSession() {
   };
 }
 
-export function memberAccess(state: Pick<EditorState, "members" | "grants" | "activeMemberId">, documentId: string) {
+export function memberAccess(
+  state: Pick<EditorState, "members" | "grants" | "folderGrants" | "documentFolders" | "activeMemberId">,
+  documentId: string,
+) {
   const member = state.members.find((item) => item.id === state.activeMemberId);
-  const role = effectiveDocumentRole(member, state.grants, documentId);
+  const folderId = state.documentFolders[documentId] ?? null;
+  const role = effectiveDocumentRole(member, state.grants, documentId, {
+    folderId,
+    folderGrants: state.folderGrants,
+  });
+  return {
+    member,
+    role,
+    canView: role !== null,
+    canEdit: canEditDocument(role),
+    canManage: canManageDocument(role),
+  };
+}
+
+export function folderAccess(
+  state: Pick<EditorState, "members" | "folderGrants" | "activeMemberId">,
+  folderId: string,
+) {
+  const member = state.members.find((item) => item.id === state.activeMemberId);
+  const role = effectiveFolderRole(member, state.folderGrants, folderId);
   return {
     member,
     role,
@@ -233,19 +271,61 @@ function readGrants(value: unknown): AccessGrant[] {
   });
 }
 
+function readFolders(value: unknown): WorkspaceFolder[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const folder = item as { id?: unknown; name?: unknown };
+    if (typeof folder.id !== "string" || typeof folder.name !== "string") return [];
+    const name = folder.name.trim().slice(0, 60);
+    if (!name) return [];
+    return [{ id: folder.id, name }];
+  });
+}
+
+function readFolderGrants(value: unknown): FolderGrant[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const grant = item as { folderId?: unknown; memberId?: unknown; role?: unknown };
+    if (typeof grant.folderId !== "string" || typeof grant.memberId !== "string") return [];
+    if (grant.role !== "owner" && grant.role !== "editor" && grant.role !== "viewer") return [];
+    return [{ folderId: grant.folderId, memberId: grant.memberId, role: grant.role }];
+  });
+}
+
+function readDocumentFolders(value: unknown, folders: WorkspaceFolder[], documentIds: Set<string>): Record<string, string> {
+  if (!value || typeof value !== "object") return {};
+  const folderIds = new Set(folders.map((folder) => folder.id));
+  const next: Record<string, string> = {};
+  for (const [documentId, folderId] of Object.entries(value as Record<string, unknown>)) {
+    if (!documentIds.has(documentId) || typeof folderId !== "string" || !folderIds.has(folderId)) continue;
+    next[documentId] = folderId;
+  }
+  return next;
+}
+
 function accessFrom(input: {
   members?: unknown;
   grants?: unknown;
+  folders?: unknown;
+  folderGrants?: unknown;
   activeMemberId?: unknown;
   displayName?: string;
 }) {
   return bootstrapAccess({
     members: readMembers(input.members),
     grants: readGrants(input.grants),
+    folders: readFolders(input.folders),
+    folderGrants: readFolderGrants(input.folderGrants),
     activeMemberId: typeof input.activeMemberId === "string" ? input.activeMemberId : undefined,
     displayName: input.displayName || "You",
     createId: () => crypto.randomUUID(),
   });
+}
+
+function ownsFolderGrant(grants: FolderGrant[], folderId: string, memberId: string, role: DocumentRole): FolderGrant[] {
+  return [...grants.filter((grant) => !(grant.folderId === folderId && grant.memberId === memberId)), { folderId, memberId, role }];
 }
 
 function blockEdit(state: EditorState) {
@@ -258,7 +338,10 @@ function ownsGrant(grants: AccessGrant[], documentId: string, memberId: string, 
   return [...grants.filter((grant) => !(grant.documentId === documentId && grant.memberId === memberId)), { documentId, memberId, role }];
 }
 
-function firstVisibleId(state: Pick<EditorState, "members" | "grants" | "activeMemberId" | "documents">, preferred: string) {
+function firstVisibleId(
+  state: Pick<EditorState, "members" | "grants" | "folderGrants" | "documentFolders" | "activeMemberId" | "documents">,
+  preferred: string,
+) {
   if (preferred && memberAccess(state, preferred).canView) return preferred;
   return state.documents.find((document) => memberAccess(state, document.id).canView)?.id ?? "";
 }
@@ -274,6 +357,9 @@ export const useEditor = create<EditorState>((set, get) => ({
   workspaceName: "Personal",
   members: [],
   grants: [],
+  folders: [],
+  folderGrants: [],
+  documentFolders: {},
   activeMemberId: "",
   theme: "light",
   sidebarCollapsed: false,
@@ -295,6 +381,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   libraryView: "home",
   shortcutsOpen: false,
   shareOpen: false,
+  shareFolderId: null,
   settingsOpen: false,
   imageOpen: false,
   zoom: 1,
@@ -323,12 +410,19 @@ export const useEditor = create<EditorState>((set, get) => ({
             const data = saved as ReturnType<typeof serialize>;
             needsAccessSave = !readMembers((saved as { members?: unknown }).members).some((member) => member.workspaceRole === "owner");
             const access = accessFrom(data);
+            const documentIds = new Set(documents.map((document) => document.id));
+            const documentFolders = readDocumentFolders(
+              (saved as { documentFolders?: unknown }).documentFolders,
+              access.folders,
+              documentIds,
+            );
             const preferred = documents.some((document) => document.id === data.activeId) ? data.activeId : documents[0].id;
             next = {
               documents,
               trash,
               ...access,
-              activeId: firstVisibleId({ ...access, documents }, preferred),
+              documentFolders,
+              activeId: firstVisibleId({ ...access, documents, documentFolders }, preferred),
               favorites: (data.favorites || []).filter((id) => documents.some((document) => document.id === id)),
               recents: (data.recents || []).filter((id) => documents.some((document) => document.id === id)),
               workspaceName: data.workspaceName || "Personal",
@@ -647,12 +741,14 @@ export const useEditor = create<EditorState>((set, get) => ({
     }
     const members = state.members.filter((member) => member.id !== memberId);
     const grants = state.grants.filter((grant) => grant.memberId !== memberId);
+    const folderGrants = state.folderGrants.filter((grant) => grant.memberId !== memberId);
     const activeMemberId = memberId === state.activeMemberId ? members.find((member) => member.workspaceRole === "owner")?.id || members[0].id : state.activeMemberId;
     const displayName = members.find((member) => member.id === activeMemberId)?.name || state.displayName;
-    const next = { ...state, members, grants, activeMemberId };
+    const next = { ...state, members, grants, folderGrants, activeMemberId };
     set({
       members,
       grants,
+      folderGrants,
       activeMemberId,
       displayName,
       activeId: firstVisibleId(next, state.activeId),
@@ -688,6 +784,110 @@ export const useEditor = create<EditorState>((set, get) => ({
     });
     schedulePersist(true);
   },
+
+  createFolder: (name = "New folder") => {
+    const state = get();
+    const actor = state.members.find((member) => member.id === state.activeMemberId);
+    if (actor?.workspaceRole !== "owner") {
+      set({ banner: "Only a workspace owner can create folders." });
+      return;
+    }
+    const trimmed = name.trim().slice(0, 60) || "New folder";
+    if (state.folders.length >= 40) {
+      set({ banner: "This workspace already has 40 folders." });
+      return;
+    }
+    const folder: WorkspaceFolder = { id: crypto.randomUUID(), name: trimmed };
+    set({
+      folders: [...state.folders, folder],
+      folderGrants: ownsFolderGrant(state.folderGrants, folder.id, state.activeMemberId, "owner"),
+      banner: null,
+    });
+    schedulePersist(true);
+  },
+
+  renameFolder: (folderId, name) => {
+    const state = get();
+    if (!folderAccess(state, folderId).canManage) {
+      set({ banner: "Only an owner can rename this folder." });
+      return;
+    }
+    const trimmed = name.trim().slice(0, 60);
+    if (!trimmed) return;
+    set({
+      folders: state.folders.map((folder) => (folder.id === folderId ? { ...folder, name: trimmed } : folder)),
+      banner: null,
+    });
+    schedulePersist(true);
+  },
+
+  deleteFolder: (folderId) => {
+    const state = get();
+    if (!folderAccess(state, folderId).canManage) {
+      set({ banner: "Only an owner can delete this folder." });
+      return;
+    }
+    const documentFolders = { ...state.documentFolders };
+    for (const [documentId, folder] of Object.entries(documentFolders)) {
+      if (folder === folderId) delete documentFolders[documentId];
+    }
+    set({
+      folders: state.folders.filter((folder) => folder.id !== folderId),
+      folderGrants: state.folderGrants.filter((grant) => grant.folderId !== folderId),
+      documentFolders,
+      shareFolderId: state.shareFolderId === folderId ? null : state.shareFolderId,
+      banner: null,
+    });
+    schedulePersist(true);
+  },
+
+  moveDocumentToFolder: (documentId, folderId) => {
+    const state = get();
+    if (!state.documents.some((document) => document.id === documentId) || !memberAccess(state, documentId).canManage) {
+      set({ banner: "Only an owner can move this map." });
+      return;
+    }
+    if (folderId && !state.folders.some((folder) => folder.id === folderId)) return;
+    if (folderId && !folderAccess(state, folderId).canManage && state.members.find((member) => member.id === state.activeMemberId)?.workspaceRole !== "owner") {
+      set({ banner: "Only a folder owner can put maps here." });
+      return;
+    }
+    const documentFolders = { ...state.documentFolders };
+    if (folderId) documentFolders[documentId] = folderId;
+    else delete documentFolders[documentId];
+    set({ documentFolders, banner: null });
+    schedulePersist(true);
+  },
+
+  setFolderRole: (folderId, memberId, role) => {
+    const state = get();
+    if (!state.folders.some((folder) => folder.id === folderId) || !folderAccess(state, folderId).canManage) {
+      set({ banner: "Only an owner can change who has access to this folder." });
+      return;
+    }
+    const member = state.members.find((item) => item.id === memberId);
+    if (!member || member.workspaceRole === "owner") return;
+    const folderGrants = role === "none"
+      ? state.folderGrants.filter((grant) => !(grant.folderId === folderId && grant.memberId === memberId))
+      : ownsFolderGrant(state.folderGrants, folderId, memberId, role);
+    const next = { ...state, folderGrants };
+    const stillVisible = memberAccess(next, state.activeId).canView;
+    set({
+      folderGrants,
+      banner: null,
+      ...(stillVisible
+        ? {}
+        : {
+            activeId: firstVisibleId(next, ""),
+            shareOpen: false,
+            shareFolderId: null,
+            ...resetSession(),
+          }),
+    });
+    schedulePersist(true);
+  },
+
+  setShareFolderId: (shareFolderId) => set({ shareFolderId, shareOpen: shareFolderId !== null }),
 
   switchMember: (memberId) => {
     const state = get();
@@ -731,10 +931,13 @@ export const useEditor = create<EditorState>((set, get) => ({
     } else if (!activeId || !documents.some((item) => item.id === activeId) || !memberAccess(state, activeId).canView) {
       activeId = firstVisibleId({ ...state, documents }, documents[0].id);
     }
+    const documentFolders = { ...state.documentFolders };
+    delete documentFolders[id];
     measurePasses.clear();
     set({
       documents,
       grants,
+      documentFolders,
       activeId,
       trash: [{ document, deletedAt: new Date().toISOString() }, ...state.trash].slice(0, 50),
       favorites: state.favorites.filter((item) => item !== id),
@@ -762,9 +965,12 @@ export const useEditor = create<EditorState>((set, get) => ({
   deleteForever: (id) => {
     const state = get();
     if (!memberAccess(state, id).canManage) return;
+    const documentFolders = { ...state.documentFolders };
+    delete documentFolders[id];
     set({
       trash: state.trash.filter((item) => item.document.id !== id),
       grants: state.grants.filter((grant) => grant.documentId !== id),
+      documentFolders,
     });
     schedulePersist(true);
   },
@@ -794,7 +1000,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     schedulePersist(false);
   },
   setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
-  setShareOpen: (shareOpen) => set({ shareOpen }),
+  setShareOpen: (shareOpen) => set({ shareOpen, shareFolderId: shareOpen ? get().shareFolderId : null }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setImageOpen: (imageOpen) => set({ imageOpen }),
   showBanner: (banner) => set({ banner }),
@@ -814,7 +1020,12 @@ export function useActiveDocument() {
 export function useDocumentAccess(documentId?: string) {
   const members = useEditor((state) => state.members);
   const grants = useEditor((state) => state.grants);
+  const folderGrants = useEditor((state) => state.folderGrants);
+  const documentFolders = useEditor((state) => state.documentFolders);
   const activeMemberId = useEditor((state) => state.activeMemberId);
   const activeId = useEditor((state) => state.activeId);
-  return memberAccess({ members, grants, activeMemberId }, documentId ?? activeId);
+  return memberAccess(
+    { members, grants, folderGrants, documentFolders, activeMemberId },
+    documentId ?? activeId,
+  );
 }

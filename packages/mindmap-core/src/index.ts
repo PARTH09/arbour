@@ -6,6 +6,8 @@ export {
   canManageDocument,
   documentRoleLabel,
   effectiveDocumentRole,
+  effectiveFolderRole,
+  strongerRole,
   workspaceRoleLabel,
 } from "./access";
 export {
@@ -36,9 +38,16 @@ export { createNodeId, treeEdgeId } from "./ids";
 export { computePositions, layoutDocument, visibleNodeBoxes } from "./layout";
 export { parseOutline, toOutline } from "./outline";
 export { documentSchema, parseDocument } from "./schema";
-export { escapeXml, sanitizeHttpUrl } from "./security";
+export {
+  escapeXml,
+  mapHref,
+  parseMapHref,
+  sanitizeHref,
+  sanitizeHttpUrl,
+} from "./security";
 export {
   BRANCH_COLORS,
+  BRANCH_FILLS,
   DENSITY_PRESETS,
   FONT_OPTIONS,
   NODE_METRICS,
@@ -50,7 +59,14 @@ export {
 } from "./styles";
 export { toSvg } from "./svg";
 export { createTemplateDocument, createWelcomeDocument, listTemplates } from "./templates";
-export type { AccessGrant, AccessMember, DocumentRole, WorkspaceRole } from "./access";
+export type {
+  AccessGrant,
+  AccessMember,
+  DocumentRole,
+  FolderGrant,
+  WorkspaceFolder,
+  WorkspaceRole,
+} from "./access";
 export type { ArrowDirection } from "./document";
 export {
   MAX_NODES,

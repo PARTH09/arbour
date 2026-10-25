@@ -30,6 +30,18 @@ export const BRANCH_COLORS = [
   "#3f6212",
 ] as const;
 
+/** Soft fills paired with BRANCH_COLORS — never white, so new topics read like Whimsical branches. */
+export const BRANCH_FILLS = [
+  "#dff3ec",
+  "#fde8dc",
+  "#e4ecfd",
+  "#eee4fd",
+  "#faf0d8",
+  "#fce4ec",
+  "#daf3f7",
+  "#e8f0d8",
+] as const;
+
 export const PALETTE = [
   { name: "Grove", value: "#0f6e56" },
   { name: "Ember", value: "#c2410c" },
@@ -72,8 +84,8 @@ export interface MapTheme {
 /**
  * Style precedence, applied in this order:
  * 1. Document theme writes unlocked nodes.
- * 2. A new child copies its parent's type, border color, and font.
- *    Children of the central topic take the next branch color instead.
+ * 2. A new child copies its parent's fill, border color, and font.
+ *    Children of the central topic take the next branch color and soft fill.
  * 3. A manual edit sets `themeLock`, so later themes leave that node alone.
  * Tree connectors follow the target border color until their own color is set.
  */
@@ -91,7 +103,6 @@ export const THEMES: MapTheme[] = [
       shadow: "soft",
     },
     branch: {
-      background: "#ffffff",
       color: "#1c1917",
       shadow: "soft",
     },
@@ -234,9 +245,9 @@ export function styleForChild(
   const style = defaultTopicStyle();
   style.fontFamily = parent.style.fontFamily;
   style.fontSize = isRootChild ? 14 : parent.style.fontSize;
-  style.borderColor = isRootChild
-    ? BRANCH_COLORS[rootChildIndex % BRANCH_COLORS.length]
-    : parent.style.borderColor;
+  const colorIndex = rootChildIndex % BRANCH_COLORS.length;
+  style.borderColor = BRANCH_COLORS[colorIndex];
+  style.background = BRANCH_FILLS[colorIndex];
 
   if (nodeType === "note") {
     style.background = "#fff7d6";

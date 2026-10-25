@@ -2,7 +2,9 @@
 
 import {
   FONT_OPTIONS,
+  mapHref,
   PALETTE,
+  parseMapHref,
   type EdgeStyle,
   type NodeShape,
   type NodeStyle,
@@ -23,6 +25,7 @@ const SHAPES: { id: NodeShape; label: string }[] = [
 
 export function FormatBar() {
   const document = useActiveDocument();
+  const documents = useEditor((state) => state.documents);
   const selection = useEditor((state) => state.selection);
   const selectedEdgeId = useEditor((state) => state.selectedEdgeId);
   const dispatch = useEditor((state) => state.dispatch);
@@ -136,15 +139,36 @@ export function FormatBar() {
               onChange={(event) => dispatch({ type: "patchNodes", ids: [first.id], note: event.target.value })}
             />
           </label>
-          <label className="flex items-center gap-2">
+          <label className="flex items-center gap-2 sm:col-span-2">
             Link
             <input
-              value={first.href ?? ""}
-              aria-label="Link"
-              placeholder="https://"
+              value={parseMapHref(first.href) ? "" : first.href ?? ""}
+              aria-label="Website link"
+              placeholder="https://website"
               className="h-7 min-w-0 flex-1 rounded-md border border-line bg-transparent px-2"
               onChange={(event) => dispatch({ type: "patchNodes", ids: [first.id], href: event.target.value || null })}
             />
+            <select
+              aria-label="Link to another map"
+              className="h-7 max-w-40 rounded-md border border-line bg-transparent px-1"
+              value={parseMapHref(first.href) ?? ""}
+              onChange={(event) =>
+                dispatch({
+                  type: "patchNodes",
+                  ids: [first.id],
+                  href: event.target.value ? mapHref(event.target.value) : null,
+                })
+              }
+            >
+              <option value="">Map on this device</option>
+              {documents
+                .filter((item) => item.id !== document.id)
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.title}
+                  </option>
+                ))}
+            </select>
           </label>
           <label className="flex items-center gap-2">
             Tags

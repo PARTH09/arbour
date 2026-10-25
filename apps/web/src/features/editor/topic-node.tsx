@@ -6,12 +6,12 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
-import { ChevronRight, Link2 } from "lucide-react";
+import { ChevronRight, Link2, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { fontStack, NODE_METRICS, type MindNode } from "@arbour/mindmap-core";
+import { fontStack, NODE_METRICS, parseMapHref, type MindNode } from "@arbour/mindmap-core";
 import { cn } from "@/lib/utils";
-import { useEditor } from "@/features/editor/store";
+import { useDocumentAccess, useEditor } from "@/features/editor/store";
 
 export type TopicFlowNode = Node<
   {
@@ -34,10 +34,15 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
   const dispatch = useEditor((state) => state.dispatch);
   const stopEditing = useEditor((state) => state.stopEditing);
   const startEditing = useEditor((state) => state.startEditing);
+  const openDocument = useEditor((state) => state.openDocument);
+  const documents = useEditor((state) => state.documents);
+  const access = useDocumentAccess();
   const [draft, setDraft] = useState(node.text);
   const field = useRef<HTMLTextAreaElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const original = useRef(node.text);
+  const mapTargetId = parseMapHref(node.href);
+  const mapTarget = mapTargetId ? documents.find((document) => document.id === mapTargetId) : null;
 
   useEffect(() => {
     if (!editing) {
@@ -70,6 +75,7 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
     style.shape === "pill" ? 999 : style.shape === "ellipse" ? 999 : style.shape === "rectangle" ? 4 : 14;
   const sideWidth = borderless ? 0 : style.borderWidth;
   const label = `${node.emoji ? `${node.emoji} ` : ""}${node.text}`;
+  const showAdd = access.canEdit && !editing && !data.connecting;
 
   return (
     <div className="group relative" role="group" aria-label={`${node.text} topic`} data-testid="topic" data-topic-text={node.text}>
@@ -183,18 +189,79 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
           </div>
         ) : null}
         {node.href ? (
-          <a
-            href={node.href}
-            target="_blank"
-            rel="noreferrer"
-            className="nodrag nopan mt-1 inline-flex items-center gap-1 text-[11px] underline"
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <Link2 size={11} />
-            Link
-          </a>
+          mapTargetId ? (
+            <button
+              type="button"
+              className="nodrag nopan mt-1 inline-flex max-w-full items-center gap-1 text-[11px] underline"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                openDocument(mapTargetId);
+              }}
+            >
+              <Link2 size={11} className="shrink-0" />
+              <span className="truncate">{mapTarget?.title || "Open map"}</span>
+            </button>
+          ) : (
+            <a
+              href={node.href}
+              target="_blank"
+              rel="noreferrer"
+              className="nodrag nopan mt-1 inline-flex max-w-full items-center gap-1 text-[11px] underline"
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <Link2 size={11} className="shrink-0" />
+              <span className="truncate">Link</span>
+            </a>
+          )
         ) : null}
       </div>
+      {showAdd ? (
+        <>
+          <button
+            type="button"
+            className={cn(
+              "nodrag nopan absolute z-20 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-panel text-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-white focus-visible:opacity-100",
+              selected && "opacity-100",
+            )}
+            style={{
+              right: data.childCount > 0 && data.chevron === "right" ? -30 : -12,
+              top: "50%",
+              transform: "translateY(-50%)",
+            }}
+            aria-label="Add child topic"
+            title="Add child"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              dispatch({ type: "addChild", parentId: id }, { edit: true, selectAll: true });
+            }}
+          >
+            <Plus size={12} />
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "nodrag nopan absolute z-20 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-panel text-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-white focus-visible:opacity-100",
+              selected && "opacity-100",
+            )}
+            style={{
+              left: "50%",
+              bottom: data.childCount > 0 && data.chevron === "down" ? -30 : -12,
+              transform: "translateX(-50%)",
+            }}
+            aria-label="Add sibling topic"
+            title="Add sibling"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              dispatch({ type: "addSibling", nodeId: id }, { edit: true, selectAll: true });
+            }}
+          >
+            <Plus size={12} />
+          </button>
+        </>
+      ) : null}
       {data.childCount > 0 ? (
         <button
           type="button"

@@ -1,5 +1,5 @@
 import { createNodeId, treeEdgeId } from "./ids";
-import { sanitizeHttpUrl } from "./security";
+import { sanitizeHref, sanitizeHttpUrl } from "./security";
 import { layoutDocument } from "./layout";
 import { defaultEdgeStyle, defaultLayout, measureNode, rootStyle, styleForChild } from "./styles";
 import {
@@ -72,7 +72,7 @@ export function finalizeNode(node: MindNode): MindNode {
       .map((tag) => clip(tag.trim(), MAX_TAG))
       .filter(Boolean)
       .slice(0, MAX_TAGS),
-    href: sanitizeHttpUrl(node.href),
+    href: sanitizeHref(node.href),
     imageUrl: sanitizeHttpUrl(node.imageUrl),
   };
   const size = measureNode(next);
@@ -361,7 +361,11 @@ export function nearestInDirection(
 export function connectorHandles(
   source: MindNode,
   target: MindNode,
+  options?: { preferRight?: boolean },
 ): { sourceHandle: string; targetHandle: string } {
+  if (options?.preferRight) {
+    return { sourceHandle: "source-right", targetHandle: "target-left" };
+  }
   const sourceCenter = nodeCenter(source);
   const targetCenter = nodeCenter(target);
   const dx = targetCenter.x - sourceCenter.x;

@@ -1,17 +1,24 @@
 "use client";
 
-import { documentRoleLabel, toOutline, workspaceRoleLabel, type DocumentRole, type WorkspaceRole } from "@arbour/mindmap-core";
+import {
+  documentRoleLabel,
+  toOutline,
+  workspaceRoleLabel,
+  type DocumentRole,
+  type WorkspaceRole,
+} from "@arbour/mindmap-core";
 import { useEffect, useState } from "react";
 
 import { Modal } from "@/components/ui/dialog";
 import { downloadText, fileSlug } from "@/lib/utils";
 import { SHORTCUTS } from "@/features/editor/shortcuts";
-import { useActiveDocument, useDocumentAccess, useEditor } from "@/features/editor/store";
+import { folderAccess, useActiveDocument, useDocumentAccess, useEditor } from "@/features/editor/store";
 
 export function Dialogs() {
   const document = useActiveDocument();
   const shortcutsOpen = useEditor((state) => state.shortcutsOpen);
   const shareOpen = useEditor((state) => state.shareOpen);
+  const shareFolderId = useEditor((state) => state.shareFolderId);
   const settingsOpen = useEditor((state) => state.settingsOpen);
   const setShortcutsOpen = useEditor((state) => state.setShortcutsOpen);
   const setShareOpen = useEditor((state) => state.setShareOpen);
@@ -22,13 +29,20 @@ export function Dialogs() {
   const showBanner = useEditor((state) => state.showBanner);
   const members = useEditor((state) => state.members);
   const grants = useEditor((state) => state.grants);
+  const folders = useEditor((state) => state.folders);
+  const folderGrants = useEditor((state) => state.folderGrants);
   const activeMemberId = useEditor((state) => state.activeMemberId);
   const addMember = useEditor((state) => state.addMember);
   const setWorkspaceRole = useEditor((state) => state.setWorkspaceRole);
   const removeMember = useEditor((state) => state.removeMember);
   const setDocumentRole = useEditor((state) => state.setDocumentRole);
+  const setFolderRole = useEditor((state) => state.setFolderRole);
   const switchMember = useEditor((state) => state.switchMember);
   const access = useDocumentAccess();
+  const shareFolder = folders.find((folder) => folder.id === shareFolderId) ?? null;
+  const folderShare = shareFolder
+    ? folderAccess({ members, folderGrants, activeMemberId }, shareFolder.id)
+    : null;
   const [workspace, setWorkspace] = useState(workspaceName);
   const [name, setName] = useState(displayName);
   const [person, setPerson] = useState("");
@@ -64,10 +78,104 @@ export function Dialogs() {
       <Modal
         open={shareOpen}
         onOpenChange={setShareOpen}
-        title="Share this map"
-        description="Roles apply to people on this device. There is no live link yet, so a file is still how you send the map."
+        title={shareFolder ? `Share ${shareFolder.name}` : "Share this map"}
+        description={
+          shareFolder
+            ? "People with folder access can open every map inside it on this device."
+            : "Roles apply to people on this device. There is no live link yet, so a file is still how you send the map."
+        }
       >
-        {document && access.role ? (
+        {shareFolder && folderShare?.role ? (
+          <div className="space-y-4">
+            <p className="text-sm">
+              Your role on this folder is {documentRoleLabel(folderShare.role)}.{" "}
+              {folderShare.canEdit ? "You can change maps inside it." : "You can look through maps inside it."}
+            </p>
+            <ul className="space-y-2">
+              {members
+                .filter((member) => member.workspaceRole === "owner")
+                .map((member) => (
+                  <li key={member.id} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="truncate">{member.name}{member.id === activeMemberId ? " (you)" : ""}</span>
+                    <span className="text-xs text-muted">Workspace owner</span>
+                  </li>
+                ))}
+              {members
+                .filter((member) => member.workspaceRole !== "owner" && folderGrants.some((grant) => grant.folderId === shareFolder.id && grant.memberId === member.id))
+                .map((member) => {
+                  const grant = folderGrants.find((item) => item.folderId === shareFolder.id && item.memberId === member.id);
+                  return (
+                    <li key={member.id} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="truncate">{member.name}{member.id === activeMemberId ? " (you)" : ""}</span>
+                      {folderShare.canManage ? (
+                        <span className="flex items-center gap-2">
+                          <select
+                            aria-label={`Folder role for ${member.name}`}
+                            className="h-8 rounded-lg border border-line bg-canvas px-2 text-sm"
+                            value={grant?.role || "viewer"}
+                            onChange={(event) => setFolderRole(shareFolder.id, member.id, event.target.value as DocumentRole)}
+                          >
+                            <option value="owner">Owner</option>
+                            <option value="editor">Editor</option>
+                            <option value="viewer">Viewer</option>
+                          </select>
+                          <button type="button" className="text-xs text-danger" onClick={() => setFolderRole(shareFolder.id, member.id, "none")}>
+                            Remove
+                          </button>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted">{grant ? documentRoleLabel(grant.role) : "Viewer"}</span>
+                      )}
+                    </li>
+                  );
+                })}
+            </ul>
+            {folderShare.canManage ? (
+              <form
+                className="flex flex-wrap items-end gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!grantMemberId) return;
+                  setFolderRole(shareFolder.id, grantMemberId, grantRole);
+                  setGrantMemberId("");
+                }}
+              >
+                <label className="min-w-36 flex-1 text-sm">
+                  Person
+                  <select
+                    aria-label="Person to give folder access"
+                    className="mt-1 h-9 w-full rounded-lg border border-line bg-canvas px-2"
+                    value={grantMemberId}
+                    onChange={(event) => setGrantMemberId(event.target.value)}
+                  >
+                    <option value="">Choose someone</option>
+                    {members
+                      .filter((member) => member.workspaceRole !== "owner" && !folderGrants.some((grant) => grant.folderId === shareFolder.id && grant.memberId === member.id))
+                      .map((member) => (
+                        <option key={member.id} value={member.id}>{member.name}</option>
+                      ))}
+                  </select>
+                </label>
+                <label className="text-sm">
+                  Role
+                  <select
+                    aria-label="Folder role"
+                    className="mt-1 h-9 rounded-lg border border-line bg-canvas px-2"
+                    value={grantRole}
+                    onChange={(event) => setGrantRole(event.target.value as DocumentRole)}
+                  >
+                    <option value="viewer">Viewer</option>
+                    <option value="editor">Editor</option>
+                    <option value="owner">Owner</option>
+                  </select>
+                </label>
+                <button type="submit" className="h-9 rounded-lg bg-accent px-3 text-sm text-white">
+                  Give access
+                </button>
+              </form>
+            ) : null}
+          </div>
+        ) : document && access.role ? (
           <div className="space-y-4">
             <p className="text-sm">
               Your role on this map is {documentRoleLabel(access.role)}. {access.canEdit ? "You can change it." : "You can look through it."}
@@ -158,33 +266,41 @@ export function Dialogs() {
           </div>
         ) : null}
         <div className="mt-4 flex justify-end gap-2">
-          <button
-            type="button"
-            className="h-9 rounded-lg border border-line px-3 text-sm"
-            onClick={async () => {
-              if (!document) return;
-              try {
-                await navigator.clipboard.writeText(toOutline(document));
-                showBanner("Outline copied.");
+          {!shareFolder ? (
+            <button
+              type="button"
+              className="h-9 rounded-lg border border-line px-3 text-sm"
+              onClick={async () => {
+                if (!document) return;
+                try {
+                  await navigator.clipboard.writeText(toOutline(document));
+                  showBanner("Outline copied.");
+                  setShareOpen(false);
+                } catch {
+                  showBanner("The browser blocked clipboard access.");
+                }
+              }}
+            >
+              Copy outline
+            </button>
+          ) : null}
+          {!shareFolder ? (
+            <button
+              type="button"
+              className="h-9 rounded-lg bg-accent px-3 text-sm text-white"
+              onClick={() => {
+                if (!document) return;
+                downloadText(`${fileSlug(document.title)}.json`, JSON.stringify(document, null, 2), "application/json");
                 setShareOpen(false);
-              } catch {
-                showBanner("The browser blocked clipboard access.");
-              }
-            }}
-          >
-            Copy outline
-          </button>
-          <button
-            type="button"
-            className="h-9 rounded-lg bg-accent px-3 text-sm text-white"
-            onClick={() => {
-              if (!document) return;
-              downloadText(`${fileSlug(document.title)}.json`, JSON.stringify(document, null, 2), "application/json");
-              setShareOpen(false);
-            }}
-          >
-            Download JSON
-          </button>
+              }}
+            >
+              Download JSON
+            </button>
+          ) : (
+            <button type="button" className="h-9 rounded-lg bg-accent px-3 text-sm text-white" onClick={() => setShareOpen(false)}>
+              Done
+            </button>
+          )}
         </div>
       </Modal>
       <Modal

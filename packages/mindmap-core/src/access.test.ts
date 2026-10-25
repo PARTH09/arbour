@@ -7,6 +7,7 @@ import {
   effectiveDocumentRole,
   type AccessGrant,
   type AccessMember,
+  type FolderGrant,
 } from "./access";
 
 const owner: AccessMember = { id: "owner", name: "You", workspaceRole: "owner" };
@@ -17,6 +18,8 @@ const grants: AccessGrant[] = [
   { documentId: "map", memberId: "editor", role: "editor" },
   { documentId: "map", memberId: "viewer", role: "viewer" },
 ];
+
+const folderGrants: FolderGrant[] = [{ folderId: "ideas", memberId: "viewer", role: "viewer" }];
 
 describe("document access", () => {
   it("gives workspace owners owner access to every map", () => {
@@ -40,6 +43,15 @@ describe("document access", () => {
   it("hides maps that were not shared with a member", () => {
     expect(effectiveDocumentRole(viewer, grants, "private")).toBeNull();
     expect(effectiveDocumentRole(undefined, grants, "map")).toBeNull();
+  });
+
+  it("opens maps through folder access when there is no direct grant", () => {
+    const role = effectiveDocumentRole(viewer, [], "private", {
+      folderId: "ideas",
+      folderGrants,
+    });
+    expect(role).toBe("viewer");
+    expect(canEditDocument(role)).toBe(false);
   });
 
   it("keeps a workspace owner when saved access has none", () => {

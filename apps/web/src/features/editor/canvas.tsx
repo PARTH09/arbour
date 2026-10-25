@@ -118,12 +118,16 @@ export function Canvas() {
 
   const edges = useMemo<BranchFlowEdge[]>(() => {
     if (!document) return [];
+    const huge = Object.keys(document.nodes).length >= 16;
+    const layoutRight =
+      document.layout.orientation === "right" || document.layout.orientation === "balanced";
     return Object.values(document.edges)
       .filter((edge) => isNodeVisible(document, edge.sourceId) && isNodeVisible(document, edge.targetId))
       .map((edge) => {
         const source = positioned(document.nodes[edge.sourceId], dragPositions);
         const target = positioned(document.nodes[edge.targetId], dragPositions);
-        const handles = connectorHandles(source, target);
+        const preferRight = edge.kind === "tree" && (huge || layoutRight);
+        const handles = connectorHandles(source, target, { preferRight });
         return {
           id: edge.id,
           source: edge.sourceId,
@@ -259,6 +263,8 @@ export function Canvas() {
         elementsSelectable={tool !== "pan"}
         selectionOnDrag={tool === "select"}
         panOnDrag={tool === "pan" ? true : [1, 2]}
+        panOnScroll
+        zoomOnScroll={false}
         panActivationKeyCode="Space"
         multiSelectionKeyCode="Shift"
         deleteKeyCode={null}
