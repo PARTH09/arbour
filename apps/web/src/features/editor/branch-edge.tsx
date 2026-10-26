@@ -2,7 +2,7 @@
 
 import { BaseEdge, type Edge, type EdgeProps } from "@xyflow/react";
 
-import type { MindEdge } from "@arbour/mindmap-core";
+import { buildEdgePath, type MindEdge } from "@arbour/mindmap-core";
 
 export type BranchFlowEdge = Edge<{ edge: MindEdge; color: string }, "branch">;
 
@@ -17,7 +17,9 @@ export function BranchEdge({
 }: EdgeProps<BranchFlowEdge>) {
   const edge = data?.edge;
   const color = data?.color ?? "#78716c";
-  const path = edgePath(edge?.style.path ?? "bezier", sourceX, sourceY, targetX, targetY);
+  // Nudge endpoints a hair into each topic so curves meet the border without a gap.
+  const joined = extendIntoNodes(sourceX, sourceY, targetX, targetY, 1.5);
+  const path = buildEdgePath(edge?.style.path ?? "bezier", joined.sx, joined.sy, joined.tx, joined.ty);
   const dash =
     edge?.style.lineStyle === "dashed" ? "7 5" : edge?.style.lineStyle === "dotted" ? "1.5 4" : undefined;
   const markerId = `arrow-${id}`;
@@ -53,8 +55,8 @@ export function BranchEdge({
       />
       {edge?.label ? (
         <text
-          x={(sourceX + targetX) / 2}
-          y={(sourceY + targetY) / 2 - 8}
+          x={(joined.sx + joined.tx) / 2}
+          y={(joined.sy + joined.ty) / 2 - 8}
           textAnchor="middle"
           fill="var(--arbour-muted)"
           fontSize="11"
@@ -67,23 +69,17 @@ export function BranchEdge({
   );
 }
 
-function edgePath(
-  style: "bezier" | "straight" | "orthogonal",
-  sx: number,
-  sy: number,
-  tx: number,
-  ty: number,
-) {
-  if (style === "straight") return `M ${sx} ${sy} L ${tx} ${ty}`;
-  if (style === "orthogonal") {
-    // Short stub from the parent, then a shared vertical rail — Whimsical fork look.
-    const dx = tx - sx;
-    const stub = Math.min(28, Math.max(12, Math.abs(dx) * 0.35)) * (dx >= 0 ? 1 : -1);
-    const railX = sx + stub;
-    if (Math.abs(ty - sy) < 0.5) return `M ${sx} ${sy} L ${tx} ${ty}`;
-    return `M ${sx} ${sy} L ${railX} ${sy} L ${railX} ${ty} L ${tx} ${ty}`;
-  }
-  const dx = Math.max(36, Math.abs(tx - sx) * 0.45);
-  const direction = tx >= sx ? 1 : -1;
-  return `M ${sx} ${sy} C ${sx + direction * dx} ${sy}, ${tx - direction * dx} ${ty}, ${tx} ${ty}`;
+function extendIntoNodes(sx: number, sy: number, tx: number, ty: number, pixels: number) {
+  const dx = tx - sx;
+  const dy = ty - sy;
+  const len = Math.hypot(dx, dy);
+  if (len < 1) return { sx, sy, tx, ty };
+  const ux = dx / len;
+  const uy = dy / len;
+  return {
+    sx: sx - ux * pixels,
+    sy: sy - uy * pixels,
+    tx: tx + ux * pixels,
+    ty: ty + uy * pixels,
+  };
 }

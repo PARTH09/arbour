@@ -12,6 +12,7 @@ export {
 } from "./access";
 export {
   applyCommand,
+  documentFromDocumentText,
   documentFromOutline,
 } from "./commands";
 export {
@@ -34,10 +35,11 @@ export {
   subtreeIds,
   visibleChildren,
 } from "./document";
+export { buildEdgePath } from "./edges";
 export { createHistory, historyCommit, historyRedo, historyUndo } from "./history";
 export { createNodeId, treeEdgeId } from "./ids";
 export { computePositions, layoutDocument, visibleNodeBoxes } from "./layout";
-export { parseOutline, toOutline } from "./outline";
+export { outlineFromDocumentText, parseOutline, toOutline } from "./outline";
 export { documentSchema, parseDocument } from "./schema";
 export {
   MAX_IMAGE_DATA_URL,
@@ -58,6 +60,7 @@ export {
   THEMES,
   TOPIC_ICONS,
   applyInheritedBranchStyle,
+  applyLineLook,
   defaultLayout,
   fillForBorder,
   fontStack,
@@ -87,6 +90,7 @@ export {
   type LayoutDensity,
   type LayoutOrientation,
   type LayoutSettings,
+  type NodeLook,
   type MindEdge,
   type MindMapDocument,
   type MindNode,

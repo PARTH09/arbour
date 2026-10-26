@@ -1,7 +1,15 @@
 import { createNodeId, treeEdgeId } from "./ids";
 import { layoutDocument, layoutSignature } from "./layout";
-import { parseOutline } from "./outline";
-import { applyInheritedBranchStyle, defaultEdgeStyle, fillForBorder, styleForChild, THEMES } from "./styles";
+import { outlineFromDocumentText, parseOutline } from "./outline";
+import {
+  applyInheritedBranchStyle,
+  defaultEdgeStyle,
+  fillForBorder,
+  measureNode,
+  NODE_METRICS,
+  styleForChild,
+  THEMES,
+} from "./styles";
 import {
   captureSubtree,
   childrenOf,
@@ -80,6 +88,26 @@ export function documentFromOutline(
   ctx: ApplyContext = {},
 ): MindMapDocument | null {
   const lines = parseOutline(outline);
+  if (!lines.length) return documentFromDocumentText(outline, title, ctx);
+  return buildDocumentFromLines(lines, title, ctx);
+}
+
+/** Build a map from prose (PDF extract / plain paragraphs), not only Markdown outlines. */
+export function documentFromDocumentText(
+  text: string,
+  title?: string,
+  ctx: ApplyContext = {},
+): MindMapDocument | null {
+  const lines = outlineFromDocumentText(text);
+  if (!lines.length) return null;
+  return buildDocumentFromLines(lines, title, ctx);
+}
+
+function buildDocumentFromLines(
+  lines: { depth: number; text: string }[],
+  title: string | undefined,
+  ctx: ApplyContext,
+): MindMapDocument | null {
   if (!lines.length) return null;
   const rootText = lines[0].text || "Imported outline";
   let doc = createDocument({
@@ -137,6 +165,10 @@ function mutate(doc: MindMapDocument, command: Command, ctx: MutationContext): M
       return promote(doc, command.nodeId);
     case "toggleCollapse":
       return toggleCollapse(doc, command.nodeId);
+    case "setCollapsed":
+      return setCollapsed(doc, command.ids, command.collapsed);
+    case "renameMany":
+      return renameMany(doc, command.updates);
     case "duplicate":
       return duplicate(doc, command.nodeId, ctx);
     case "patchNodes":
@@ -308,7 +340,13 @@ function addFloating(
     position: command.position,
     width: 80,
     height: 40,
-    style: styleForChild(doc.nodes[doc.rootId], true, Object.keys(doc.nodes).length, nodeType),
+    style: styleForChild(
+      doc.nodes[doc.rootId],
+      true,
+      Object.keys(doc.nodes).length,
+      nodeType,
+      doc.layout.nodeLook ?? "cards",
+    ),
     note: "",
     href: null,
     tags: [],
@@ -395,7 +433,13 @@ function inheritBranchPaint(doc: MindMapDocument, nodeId: NodeId): void {
   const siblings = childrenOf(doc, parent.id);
   const index = siblings.findIndex((item) => item.id === node.id);
   const isRootChild = parent.id === doc.rootId;
-  const nextStyle = applyInheritedBranchStyle(node, parent, isRootChild, Math.max(0, index));
+  const nextStyle = applyInheritedBranchStyle(
+    node,
+    parent,
+    isRootChild,
+    Math.max(0, index),
+    doc.layout.nodeLook ?? "cards",
+  );
   if (nextStyle !== node.style) {
     doc.nodes[nodeId] = finalizeNode({ ...node, style: nextStyle });
   }
@@ -452,6 +496,40 @@ function toggleCollapse(doc: MindMapDocument, nodeId: NodeId): MutationResult {
   node.collapsed = !node.collapsed;
   finish(doc);
   return { changed: true, focusId: nodeId };
+}
+
+function setCollapsed(doc: MindMapDocument, ids: NodeId[], collapsed: boolean): MutationResult {
+  let changed = false;
+  let focusId: NodeId | undefined;
+  for (const id of ids) {
+    const node = doc.nodes[id];
+    if (!node || !childrenOf(doc, id).length) continue;
+    if (node.collapsed === collapsed) continue;
+    node.collapsed = collapsed;
+    changed = true;
+    focusId = id;
+  }
+  if (!changed) return { changed: false };
+  finish(doc);
+  return { changed: true, focusId };
+}
+
+function renameMany(
+  doc: MindMapDocument,
+  updates: { nodeId: NodeId; text: string }[],
+): MutationResult {
+  let changed = false;
+  for (const update of updates) {
+    const node = doc.nodes[update.nodeId];
+    if (!node) continue;
+    const next = finalizeNode({ ...node, text: update.text });
+    if (node.text === next.text) continue;
+    doc.nodes[update.nodeId] = next;
+    changed = true;
+  }
+  if (!changed) return { changed: false };
+  finish(doc);
+  return { changed: true };
 }
 
 function duplicate(doc: MindMapDocument, nodeId: NodeId, ctx: MutationContext): MutationResult {
@@ -793,6 +871,25 @@ function insertChild(
   });
   doc.nodes[node.id] = node;
   if (parent.collapsed) parent.collapsed = false;
+  // Underline leaves become boxed parents once they gain children (Whimsical ladder).
+  if (
+    siblings.length === 0 &&
+    parent.style.shape === "underline" &&
+    parent.nodeType === "topic" &&
+    parent.id !== doc.rootId
+  ) {
+    parent.style = {
+      ...parent.style,
+      shape: "rounded",
+      background: fillForBorder(parent.style.borderColor),
+      shadow: "soft",
+      borderWidth: NODE_METRICS.border,
+      borderStyle: "solid",
+    };
+    const size = measureNode(parent);
+    parent.width = size.width;
+    parent.height = size.height;
+  }
   const ordered = siblings.map((item) => item.id);
   const index =
     options.index == null ? ordered.length : Math.max(0, Math.min(options.index, ordered.length));

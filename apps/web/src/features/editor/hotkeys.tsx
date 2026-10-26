@@ -29,7 +29,7 @@ export function Hotkeys() {
   const startEditing = useEditor((state) => state.startEditing);
   const stopEditing = useEditor((state) => state.stopEditing);
   const setTool = useEditor((state) => state.setTool);
-  const setShortcutsOpen = useEditor((state) => state.setShortcutsOpen);
+  const setHelpOpen = useEditor((state) => state.setHelpOpen);
   const showGrid = useEditor((state) => state.showGrid);
   const toggleOutline = useEditor((state) => state.toggleOutline);
   const { zoomIn, zoomOut, setViewport, getNodesBounds, screenToFlowPosition } = useReactFlow();
@@ -43,17 +43,26 @@ export function Hotkeys() {
         stopEditing();
         setSelection([]);
         setTool("select");
-        setShortcutsOpen(false);
+        setHelpOpen(false);
         return;
       }
       if (event.key === "?" || (event.shiftKey && event.key === "/")) {
         event.preventDefault();
-        setShortcutsOpen(true);
+        setHelpOpen(true, "shortcuts");
         return;
       }
       if (mod && event.key === "\\") {
         event.preventDefault();
         toggleOutline();
+        return;
+      }
+      if (mod && (event.key === "/" || event.code === "Slash") && event.shiftKey) {
+        event.preventDefault();
+        const ids = Object.values(document.nodes)
+          .filter((node) => childrenOf(document, node.id).length > 0)
+          .map((node) => node.id);
+        const anyExpanded = ids.some((id) => !document.nodes[id]?.collapsed);
+        dispatch({ type: "setCollapsed", ids, collapsed: anyExpanded });
         return;
       }
       if (mod && (event.key === "/" || event.code === "Slash") && !event.shiftKey) {
@@ -262,7 +271,7 @@ export function Hotkeys() {
     selectedEdgeId,
     selection,
     setSelection,
-    setShortcutsOpen,
+    setHelpOpen,
     setTool,
     setViewport,
     showGrid,

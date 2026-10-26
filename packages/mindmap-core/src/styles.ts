@@ -4,6 +4,7 @@ import type {
   LayoutDensity,
   LayoutSettings,
   MindNode,
+  NodeLook,
   NodeStyle,
   NodeType,
 } from "./types";
@@ -79,6 +80,7 @@ export interface MapTheme {
   root: Partial<NodeStyle>;
   branch: Partial<NodeStyle>;
   note: Partial<NodeStyle>;
+  nodeLook?: NodeLook;
 }
 
 /**
@@ -173,12 +175,44 @@ export const THEMES: MapTheme[] = [
       borderColor: "#a5b4fc",
     },
   },
+  {
+    id: "lines",
+    name: "Lines",
+    description: "Labels connected by colored lines — no boxes",
+    nodeLook: "lines",
+    root: {
+      shape: "rounded",
+      background: "#fffcf8",
+      color: "#1c1917",
+      borderColor: "#e5ddd2",
+      borderWidth: 1,
+      borderStyle: "solid",
+      shadow: "soft",
+    },
+    branch: {
+      shape: "borderless",
+      background: "transparent",
+      color: "#1c1917",
+      borderStyle: "none",
+      borderWidth: 0,
+      shadow: "none",
+    },
+    note: {
+      shape: "borderless",
+      background: "transparent",
+      color: "#78716c",
+      borderStyle: "none",
+      borderWidth: 0,
+      shadow: "none",
+    },
+  },
 ];
 
 export function defaultLayout(): LayoutSettings {
   return {
     orientation: "balanced",
     density: "comfortable",
+    nodeLook: "cards",
     ...DENSITY_PRESETS.comfortable,
   };
 }
@@ -227,7 +261,7 @@ export function defaultEdgeStyle(stroke: string, kind: "tree" | "link"): EdgeSty
     };
   }
   return {
-    path: "orthogonal",
+    path: "bezier",
     stroke,
     strokeWidth: 2,
     lineStyle: "solid",
@@ -289,6 +323,7 @@ export function styleForChild(
   isRootChild: boolean,
   rootChildIndex: number,
   nodeType: NodeType,
+  nodeLook: NodeLook = "cards",
 ): NodeStyle {
   const style = defaultTopicStyle();
   style.fontFamily = parent.style.fontFamily;
@@ -301,13 +336,16 @@ export function styleForChild(
     style.shape = "rounded";
     style.shadow = "soft";
   } else {
-    // Whimsical ladder: deeper topics become underline leaves on the branch color.
     style.borderColor = parent.style.borderColor;
-    style.shape = "underline";
-    style.background = "transparent";
-    style.shadow = "none";
-    style.borderWidth = 1.5;
+    style.background = fillForBorder(parent.style.borderColor);
+    style.shape = "rounded";
+    style.shadow = "soft";
+    style.borderWidth = NODE_METRICS.border;
     style.borderStyle = "solid";
+  }
+
+  if (nodeLook === "lines" && nodeType === "topic") {
+    applyLineLook(style);
   }
 
   if (nodeType === "note") {
@@ -336,14 +374,24 @@ export function styleForChild(
 }
 
 /** Branch paint fields inherited on reparent (skips theme-locked nodes). */
+export function applyLineLook(style: NodeStyle): NodeStyle {
+  style.shape = "borderless";
+  style.background = "transparent";
+  style.borderStyle = "none";
+  style.borderWidth = 0;
+  style.shadow = "none";
+  return style;
+}
+
 export function applyInheritedBranchStyle(
   node: MindNode,
   parent: MindNode,
   isRootChild: boolean,
   childIndex: number,
+  nodeLook: NodeLook = "cards",
 ): NodeStyle {
   if (node.style.themeLock) return node.style;
-  const next = styleForChild(parent, isRootChild, childIndex, node.nodeType);
+  const next = styleForChild(parent, isRootChild, childIndex, node.nodeType, nodeLook);
   return {
     ...node.style,
     shape: next.shape,
@@ -375,10 +423,16 @@ export function measureNode(
     return lines;
   };
 
+  const underline = node.style.shape === "underline";
+  const borderless = node.style.shape === "borderless";
+  const padX = underline || borderless ? 6 : NODE_METRICS.paddingX;
+  const padY = underline || borderless ? 4 : NODE_METRICS.paddingY;
+  const minWidth = underline || borderless ? 36 : NODE_METRICS.minWidth;
+
   const label = `${node.emoji ? `${node.emoji} ` : ""}${node.text || " "}`;
   const textLines = Math.max(1, wrapCount(label, fontSize));
   const noteLines = wrapCount(node.note, Math.max(11, fontSize - 2));
-  let textWidth = NODE_METRICS.minWidth - NODE_METRICS.paddingX * 2;
+  let textWidth = minWidth - padX * 2;
   for (const line of label.split("\n")) {
     textWidth = Math.max(textWidth, Math.min(maxText, line.length * fontSize * ratio));
   }
@@ -391,17 +445,17 @@ export function measureNode(
   const tagRow = node.tags.length ? 22 : 0;
   const imageRow = node.imageUrl ? 104 : 0;
   const noteHeight = noteLines ? noteLines * Math.max(11, fontSize - 2) * NODE_METRICS.lineHeight + 4 : 0;
-  let width = textWidth + NODE_METRICS.paddingX * 2 + border * 2;
+  let width = textWidth + padX * 2 + border * 2;
   let height =
-    NODE_METRICS.paddingY * 2 +
+    padY * 2 +
     border * 2 +
     textLines * fontSize * NODE_METRICS.lineHeight +
     noteHeight +
     tagRow +
     imageRow;
 
-  width = Math.max(NODE_METRICS.minWidth, Math.min(maxText + NODE_METRICS.paddingX * 2 + border * 2, width));
-  height = Math.max(40, height);
+  width = Math.max(minWidth, Math.min(maxText + padX * 2 + border * 2, width));
+  height = Math.max(underline || borderless ? 28 : 40, height);
 
   if (node.style.shape === "ellipse") {
     width = Math.max(width, 96);

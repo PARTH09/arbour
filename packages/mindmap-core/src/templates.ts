@@ -137,6 +137,33 @@ const TEMPLATES: TemplateDefinition[] = [
       { side: "left", text: "Platform", children: text("Engineering", "Operations", "Finance") },
     ],
   },
+  {
+    id: "sample-product-plan",
+    title: "Sample product plan",
+    description: "Test data for import, reparent, translate, and collapse.",
+    root: "Product Plan",
+    branches: [
+      {
+        side: "right",
+        text: "Audience",
+        children: [
+          { text: "Weekly digest" },
+          { text: "Channels", children: text("Newsletter", "Social posts") },
+          { text: "Personas", children: text("Founders", "Product managers", "Design leads") },
+        ],
+      },
+      {
+        side: "right",
+        text: "Timeline",
+        children: text("June beta", "July feedback", "August launch"),
+      },
+      {
+        side: "left",
+        text: "Risks",
+        children: text("Research delays", "Hiring blockers", "Vendor slip"),
+      },
+    ],
+  },
 ];
 
 function text(...labels: string[]): TemplateBranch[] {

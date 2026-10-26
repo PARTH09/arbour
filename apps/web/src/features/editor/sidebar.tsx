@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Clock3, FilePlus2, Folder, FolderPlus, Searc
 import { useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { loadSampleDocument, SAMPLE_OPTIONS, type SampleId } from "@/features/editor/load-sample";
 import { folderAccess, memberAccess, useEditor, type LibraryView } from "@/features/editor/store";
 
 const VIEWS: { id: LibraryView; label: string; icon: typeof Folder }[] = [
@@ -42,6 +43,8 @@ export function Sidebar() {
   const moveDocumentToFolder = useEditor((state) => state.moveDocumentToFolder);
   const setShareFolderId = useEditor((state) => state.setShareFolderId);
   const createFromTemplate = useEditor((state) => state.createFromTemplate);
+  const importDocument = useEditor((state) => state.importDocument);
+  const showBanner = useEditor((state) => state.showBanner);
   const toggleFavorite = useEditor((state) => state.toggleFavorite);
   const duplicateDocument = useEditor((state) => state.duplicateDocument);
   const renameDocument = useEditor((state) => state.renameDocument);
@@ -65,6 +68,24 @@ export function Sidebar() {
   const visibleTrash = trash.filter((entry) => memberAccess(accessState, entry.document.id).canManage && entry.document.title.toLowerCase().includes(needle));
   const filteredDocs = visibleDocs.filter((document) => document.title.toLowerCase().includes(needle));
   const templates = listTemplates().filter((template) => template.title.toLowerCase().includes(needle));
+  const samples = SAMPLE_OPTIONS.filter(
+    (sample) =>
+      sample.label.toLowerCase().includes(needle) || sample.description.toLowerCase().includes(needle),
+  );
+
+  const openSample = (id: SampleId) => {
+    void (async () => {
+      try {
+        showBanner("Loading sample…");
+        const imported = await loadSampleDocument(id);
+        importDocument(imported);
+        showBanner("Sample opened.");
+      } catch (error) {
+        showBanner(error instanceof Error ? error.message : "Could not open that sample.");
+      }
+    })();
+  };
+
   const visibleFolders = folders.filter((folder) => {
     if (workspaceOwner || folderAccess(accessState, folder.id).canView) return true;
     return allowedDocs.some((document) => documentFolders[document.id] === folder.id);
@@ -141,20 +162,44 @@ export function Sidebar() {
       </nav>
       <div className="mt-2 min-h-0 flex-1 overflow-auto px-2 pb-3">
         {view === "templates" ? (
-          <ul className="space-y-1">
-            {templates.map((template) => (
-              <li key={template.id}>
-                <button
-                  type="button"
-                  className="w-full rounded-lg px-2 py-2 text-left hover:bg-accent-soft"
-                  onClick={() => createFromTemplate(template.id)}
-                >
-                  <span className="block text-sm">{template.title}</span>
-                  <span className="block text-xs text-muted">{template.description}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div className="space-y-3">
+            <div>
+              <p className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted">Sample examples</p>
+              <ul className="space-y-1">
+                {samples.map((sample) => (
+                  <li key={sample.id}>
+                    <button
+                      type="button"
+                      className="w-full rounded-lg px-2 py-2 text-left hover:bg-accent-soft"
+                      onClick={() => openSample(sample.id)}
+                    >
+                      <span className="block text-sm">{sample.label}</span>
+                      <span className="block text-xs text-muted">{sample.description}</span>
+                    </button>
+                  </li>
+                ))}
+                {samples.length === 0 ? <p className="px-2 py-2 text-xs text-muted">No samples match.</p> : null}
+              </ul>
+            </div>
+            <div>
+              <p className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted">Templates</p>
+              <ul className="space-y-1">
+                {templates.map((template) => (
+                  <li key={template.id}>
+                    <button
+                      type="button"
+                      className="w-full rounded-lg px-2 py-2 text-left hover:bg-accent-soft"
+                      onClick={() => createFromTemplate(template.id)}
+                    >
+                      <span className="block text-sm">{template.title}</span>
+                      <span className="block text-xs text-muted">{template.description}</span>
+                    </button>
+                  </li>
+                ))}
+                {templates.length === 0 ? <p className="px-2 py-2 text-xs text-muted">No templates match.</p> : null}
+              </ul>
+            </div>
+          </div>
         ) : view === "trash" ? (
           <ul className="space-y-1">
             {visibleTrash.map((entry) => (

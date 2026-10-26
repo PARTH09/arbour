@@ -1,6 +1,12 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { applyCommand, documentFromOutline } from "./commands";
+import { applyCommand, documentFromDocumentText, documentFromOutline } from "./commands";
+
+const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "../fixtures");
+const fixture = (name: string) => readFileSync(join(FIXTURES, name), "utf8");
 import {
   childrenOf,
   connectorHandles,
@@ -17,6 +23,7 @@ import { visibleNodeBoxes } from "./layout";
 import { parseOutline, toOutline } from "./outline";
 import { parseDocument } from "./schema";
 import { parseMapHref, sanitizeHref, sanitizeHttpUrl, sanitizeImageUrl } from "./security";
+import { buildEdgePath } from "./edges";
 import { BRANCH_COLORS, BRANCH_FILLS, THEMES } from "./styles";
 import { toSvg } from "./svg";
 import { createTemplateDocument, createWelcomeDocument, listTemplates } from "./templates";
@@ -115,11 +122,41 @@ describe("hierarchy", () => {
 
     const leaf = run(doc, { type: "addChild", parentId: created[0], text: "Leaf" }, context);
     expect(leaf.document.nodes[leaf.focusId!].style.borderColor).toBe(BRANCH_COLORS[0]);
-    expect(leaf.document.nodes[leaf.focusId!].style.shape).toBe("underline");
-    expect(leaf.document.nodes[leaf.focusId!].style.background).toBe("transparent");
+    expect(leaf.document.nodes[leaf.focusId!].style.shape).toBe("rounded");
+    expect(leaf.document.nodes[leaf.focusId!].style.background).toBe(BRANCH_FILLS[0]);
+    expect(leaf.document.nodes[leaf.focusId!].style.background).not.toBe("transparent");
   });
 
-  it("inherits branch color and leaf style when reparenting", () => {
+  it("promotes a legacy underline leaf to a boxed parent when it gains a child", () => {
+    const context = ctx();
+    let doc = map();
+    const branch = run(doc, { type: "addChild", parentId: doc.rootId, text: "Branch" }, context);
+    doc = branch.document;
+    const leaf = run(doc, { type: "addChild", parentId: branch.focusId!, text: "Leaf" }, context);
+    doc = leaf.document;
+    doc = {
+      ...doc,
+      nodes: {
+        ...doc.nodes,
+        [leaf.focusId!]: {
+          ...doc.nodes[leaf.focusId!],
+          style: {
+            ...doc.nodes[leaf.focusId!].style,
+            shape: "underline",
+            background: "transparent",
+            shadow: "none",
+          },
+        },
+      },
+    };
+
+    const nested = run(doc, { type: "addChild", parentId: leaf.focusId!, text: "Nested" }, context);
+    expect(nested.document.nodes[leaf.focusId!].style.shape).toBe("rounded");
+    expect(nested.document.nodes[leaf.focusId!].style.background).not.toBe("transparent");
+    expect(nested.document.nodes[nested.focusId!].style.shape).toBe("rounded");
+  });
+
+  it("inherits branch color and rounded fill when reparenting", () => {
     const context = ctx();
     let doc = map();
     const a = run(doc, { type: "addChild", parentId: doc.rootId, text: "A" }, context);
@@ -136,8 +173,8 @@ describe("hierarchy", () => {
       context,
     );
     expect(moved.document.nodes[leaf.focusId!].style.borderColor).toBe(BRANCH_COLORS[1]);
-    expect(moved.document.nodes[leaf.focusId!].style.shape).toBe("underline");
-    expect(moved.document.nodes[leaf.focusId!].style.background).toBe("transparent");
+    expect(moved.document.nodes[leaf.focusId!].style.shape).toBe("rounded");
+    expect(moved.document.nodes[leaf.focusId!].style.background).toBe(BRANCH_FILLS[1]);
   });
 
   it("repairs white topic fills from older documents", () => {
@@ -168,6 +205,36 @@ describe("hierarchy", () => {
       sourceHandle: "source-right",
       targetHandle: "target-left",
     });
+  });
+
+  it("attaches balanced left and right branches on the inner sides", () => {
+    const root = map().nodes.n1;
+    const leftChild = { ...root, id: "left", side: "left" as const, position: { x: 40, y: 80 }, floating: false };
+    const rightChild = { ...root, id: "right", side: "right" as const, position: { x: 280, y: 80 }, floating: false };
+
+    expect(connectorHandles(root, leftChild, { layout: "balanced" })).toEqual({
+      sourceHandle: "source-left",
+      targetHandle: "target-right",
+    });
+    expect(connectorHandles(root, rightChild, { layout: "balanced" })).toEqual({
+      sourceHandle: "source-right",
+      targetHandle: "target-left",
+    });
+  });
+
+  it("keeps orthogonal forks from overshooting the child", () => {
+    const path = buildEdgePath("orthogonal", 200, 100, 160, 140);
+    // Stub must stay between parent (200) and child (160) — no reverse stub past 160.
+    expect(path).toMatch(/^M 200 100 L (\d+(?:\.\d+)?) 100 L \1 140 L 160 140$/);
+    const railX = Number(path.match(/^M 200 100 L (\d+)/)?.[1]);
+    expect(railX).toBeLessThan(200);
+    expect(railX).toBeGreaterThan(160);
+
+    const vertical = buildEdgePath("orthogonal", 100, 200, 120, 120);
+    expect(vertical).toMatch(/^M 100 200 L 100 (\d+(?:\.\d+)?) L 120 \1 L 120 120$/);
+    const railY = Number(vertical.match(/^M 100 200 L 100 (\d+)/)?.[1]);
+    expect(railY).toBeLessThan(200);
+    expect(railY).toBeGreaterThan(120);
   });
 
   it("deletes a subtree and refuses to delete the root", () => {
@@ -344,6 +411,71 @@ describe("hierarchy", () => {
     ]);
   });
 
+  it("builds a hierarchy from prose-style document text", () => {
+    const doc = documentFromDocumentText(fixture("document-product-plan.txt"), "from-pdf", ctx());
+    expect(doc?.title).toBe("from-pdf");
+    expect(doc?.nodes[doc.rootId].text).toBe("Product Plan");
+    const branches = childrenOf(doc!, doc!.rootId).map((node) => node.text);
+    expect(branches[0]).toMatch(/Audience/);
+    expect(branches.some((text) => /Timeline/.test(text))).toBe(true);
+    expect(branches.some((text) => /Risks/.test(text))).toBe(true);
+  });
+
+  it("loads Whimsical, Hindi, and Gujarati fixture outlines", () => {
+    const whimsical = documentFromOutline(fixture("whimsical-product-ideas.md"), undefined, ctx());
+    expect(whimsical?.nodes[whimsical.rootId].text).toBe("Product Ideas");
+    expect(childrenOf(whimsical!, whimsical!.rootId).map((node) => node.text)).toEqual([
+      "Personal productivity",
+      "Data & sync",
+      "Growth",
+    ]);
+
+    const hindi = documentFromOutline(fixture("document-hindi-outline.md"), "hindi-sample", ctx());
+    expect(hindi?.title).toBe("hindi-sample");
+    expect(hindi?.nodes[hindi.rootId].text).toBe("उत्पाद योजना");
+    expect(childrenOf(hindi!, hindi!.rootId).map((node) => node.text)).toEqual([
+      "दर्शक",
+      "समयरेखा",
+      "जोखिम",
+    ]);
+
+    const gujarati = documentFromOutline(fixture("document-gujarati-outline.md"), "gujarati-sample", ctx());
+    expect(gujarati?.nodes[gujarati.rootId].text).toBe("ઉત્પાદન યોજના");
+    expect(childrenOf(gujarati!, gujarati!.rootId).map((node) => node.text)).toEqual([
+      "પ્રેક્ષકો",
+      "સમયરેખા",
+      "જોખમો",
+    ]);
+  });
+
+  it("collapses many branches and renames many topics at once", () => {
+    const context = ctx();
+    let doc = map();
+    const parent = run(doc, { type: "addChild", parentId: doc.rootId, text: "Parent" }, context);
+    doc = parent.document;
+    const child = run(doc, { type: "addChild", parentId: parent.focusId!, text: "Child" }, context);
+    doc = child.document;
+    const collapsed = run(
+      doc,
+      { type: "setCollapsed", ids: [parent.focusId!], collapsed: true },
+      context,
+    );
+    expect(collapsed.document.nodes[parent.focusId!].collapsed).toBe(true);
+    const renamed = run(
+      collapsed.document,
+      {
+        type: "renameMany",
+        updates: [
+          { nodeId: parent.focusId!, text: "माता" },
+          { nodeId: child.focusId!, text: "बच्चा" },
+        ],
+      },
+      context,
+    );
+    expect(renamed.document.nodes[parent.focusId!].text).toBe("माता");
+    expect(renamed.document.nodes[child.focusId!].text).toBe("बच्चा");
+  });
+
   it("rejects a circular import and unsafe urls", () => {
     let doc = map();
     const context = ctx();
@@ -513,7 +645,7 @@ describe("history, navigation, and themes", () => {
   });
 
   it("builds every starter template into a valid map", () => {
-    expect(listTemplates()).toHaveLength(10);
+    expect(listTemplates()).toHaveLength(11);
     for (const template of listTemplates()) {
       const doc = createTemplateDocument(template.id, ctx());
       expect(doc?.title).toBe(template.title);

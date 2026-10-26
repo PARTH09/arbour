@@ -54,10 +54,41 @@ export function EditorShell() {
 
 function EmptyMap() {
   const document = useActiveDocument();
+  const createMap = useEditor((state) => state.createMap);
+  const setHelpOpen = useEditor((state) => state.setHelpOpen);
+  const setSettingsOpen = useEditor((state) => state.setSettingsOpen);
   if (document) return null;
   return (
-    <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted">
-      No maps are shared with you. Create one from the library, or switch person in settings.
+    <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+      <div>
+        <p className="font-display text-xl font-medium tracking-tight">No map open</p>
+        <p className="mt-1 max-w-sm text-sm text-muted">
+          Create a map from the library, open a template, or check that your account can view maps on this device.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <button
+          type="button"
+          className="h-9 rounded-xl bg-accent px-4 text-sm font-medium text-white hover:opacity-90"
+          onClick={() => createMap()}
+        >
+          New map
+        </button>
+        <button
+          type="button"
+          className="h-9 rounded-xl border border-line px-4 text-sm hover:bg-accent-soft"
+          onClick={() => setHelpOpen(true, null)}
+        >
+          Learn Arbour
+        </button>
+        <button
+          type="button"
+          className="h-9 rounded-xl border border-line px-4 text-sm hover:bg-accent-soft"
+          onClick={() => setSettingsOpen(true)}
+        >
+          Settings
+        </button>
+      </div>
     </div>
   );
 }

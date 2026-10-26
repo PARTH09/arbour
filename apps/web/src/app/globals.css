@@ -99,6 +99,53 @@ button:disabled {
   fill: none;
 }
 
+/* Keep connectors under topic chrome so underlines/text stay readable. */
+.react-flow__edges {
+  z-index: 0 !important;
+}
+
+.react-flow__nodes {
+  z-index: 1 !important;
+}
+
+/* Center connection points on the topic border (avoids gaps / outer stubs). */
+.react-flow__handle-left {
+  left: 0 !important;
+  transform: translate(-50%, -50%) !important;
+}
+
+.react-flow__handle-right {
+  right: 0 !important;
+  left: auto !important;
+  transform: translate(50%, -50%) !important;
+}
+
+.react-flow__handle-top {
+  top: 0 !important;
+  transform: translate(-50%, -50%) !important;
+}
+
+.react-flow__handle-bottom {
+  bottom: 0 !important;
+  top: auto !important;
+  transform: translate(-50%, 50%) !important;
+}
+
+.react-flow__handle-left.arbour-underline-handle,
+.react-flow__handle-right.arbour-underline-handle {
+  top: auto !important;
+  bottom: 1px !important;
+  transform: translateY(0) !important;
+}
+
+.react-flow__handle-left.arbour-underline-handle {
+  transform: translate(-50%, 0) !important;
+}
+
+.react-flow__handle-right.arbour-underline-handle {
+  transform: translate(50%, 0) !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .react-flow__node,
   .arbour-motion {

@@ -369,11 +369,23 @@ export function nearestInDirection(
 export function connectorHandles(
   source: MindNode,
   target: MindNode,
-  options?: { preferRight?: boolean },
+  options?: { preferRight?: boolean; layout?: MindMapDocument["layout"]["orientation"] },
 ): { sourceHandle: string; targetHandle: string } {
   if (options?.preferRight) {
     return { sourceHandle: "source-right", targetHandle: "target-left" };
   }
+
+  const layout = options?.layout;
+  const vertical = layout === "up" || layout === "down" || layout === "radial";
+
+  // Balanced / left / right maps: follow the branch side so left topics attach
+  // on the left (no outer stubs) and right topics attach on the right.
+  if (!vertical && !target.floating && (target.side === "left" || target.side === "right")) {
+    return target.side === "left"
+      ? { sourceHandle: "source-left", targetHandle: "target-right" }
+      : { sourceHandle: "source-right", targetHandle: "target-left" };
+  }
+
   const sourceCenter = nodeCenter(source);
   const targetCenter = nodeCenter(target);
   const dx = targetCenter.x - sourceCenter.x;
@@ -396,7 +408,7 @@ export function edgeList(doc: MindMapDocument): MindEdge[] {
   return Object.values(doc.edges);
 }
 
-/** Soft-fill topics that still have pure white backgrounds from older saves. */
+/** Soft-fill topics and default branch curves for older saves. */
 export function refreshDocumentStyles(doc: MindMapDocument): MindMapDocument {
   let changed = false;
   const nodes = { ...doc.nodes };
@@ -407,7 +419,15 @@ export function refreshDocumentStyles(doc: MindMapDocument): MindMapDocument {
       changed = true;
     }
   }
-  return changed ? { ...doc, nodes } : doc;
+  const edges = { ...doc.edges };
+  for (const edge of Object.values(doc.edges)) {
+    // Auto-colored tree connectors used to default to elbows; prefer curves now.
+    if (edge.kind === "tree" && edge.style.followNode && edge.style.path === "orthogonal") {
+      edges[edge.id] = { ...edge, style: { ...edge.style, path: "bezier" } };
+      changed = true;
+    }
+  }
+  return changed ? { ...doc, nodes, edges } : doc;
 }
 
 export function normalizeDocument(
@@ -445,6 +465,7 @@ export function normalizeDocument(
       .filter((parentId): parentId is string => Boolean(parentId)),
   );
   for (const parentId of parentIds) normalizeSiblings(doc, parentId);
+  if (doc.layout.nodeLook !== "lines") doc.layout.nodeLook = "cards";
   syncTreeEdges(doc);
   layoutDocument(doc);
   const issues = documentIssues(doc);

@@ -1,0 +1,20 @@
+Product Plan
+
+1. Audience
+Reach new readers with a weekly digest of product ideas.
+
+1.1 Channels
+Newsletter and social posts matter most for early traction.
+
+1.2 Personas
+Founders, product managers, and design leads.
+
+2. Timeline
+Ship a beta in June. Gather feedback in July. Launch publicly in August.
+
+2.1 Milestones
+Design complete. Engineering spike. Private beta. Public launch.
+
+3. Risks
+Scoped features may slip if research takes longer than two weeks.
+Hiring and vendor delays can block the offline sync workstream.

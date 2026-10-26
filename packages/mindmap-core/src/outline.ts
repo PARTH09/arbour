@@ -1,6 +1,6 @@
 import { childrenOf } from "./document";
 import type { MindMapDocument } from "./types";
-import { MAX_TEXT } from "./types";
+import { MAX_NODES, MAX_TEXT } from "./types";
 
 export interface OutlineLine {
   depth: number;
@@ -75,6 +75,74 @@ export function toOutline(doc: MindMapDocument): string {
     walk(node.id, 0);
   }
   return lines.join("\n").trim();
+}
+
+/**
+ * Turn prose (PDF/plain text) into a hierarchy when there is no Markdown outline.
+ * Prefers numbered sections, short headings, then sentence branches.
+ */
+export function outlineFromDocumentText(text: string): OutlineLine[] {
+  const cleaned = text.replace(/\r\n/g, "\n").replace(/\u0000/g, "").trim();
+  if (!cleaned) return [];
+
+  const structured = parseOutline(cleaned);
+  if (looksLikeOutline(structured)) return structured.slice(0, MAX_NODES);
+
+  const blocks = cleaned
+    .split(/\n{2,}/)
+    .map((block) => block.replace(/[ \t]+/g, " ").replace(/\n/g, " ").trim())
+    .filter(Boolean);
+  if (!blocks.length) {
+    const single = cleaned.split("\n").map((line) => line.trim()).filter(Boolean);
+    if (!single.length) return [];
+    return single.slice(0, MAX_NODES).map((line, index) => ({
+      depth: index === 0 ? 0 : 1,
+      text: clipText(topicFromBlock(line)),
+    }));
+  }
+
+  const lines: OutlineLine[] = [];
+  lines.push({ depth: 0, text: clipText(topicFromBlock(blocks[0])) });
+
+  for (const block of blocks.slice(1)) {
+    const numbered = /^(\d+(?:\.\d+)*)[.)]\s+([\s\S]+)$/.exec(block);
+    if (numbered) {
+      const depth = Math.min(4, numbered[1].split(".").length);
+      lines.push({ depth, text: clipText(topicFromBlock(numbered[2])) });
+      continue;
+    }
+
+    if (block.length <= 72 && /^[A-Z0-9][A-Z0-9\s,:'-]{2,}$/.test(block)) {
+      lines.push({ depth: 1, text: clipText(block) });
+      continue;
+    }
+
+    if (block.length <= 90) {
+      lines.push({ depth: 1, text: clipText(topicFromBlock(block)) });
+      continue;
+    }
+
+    const sentences = block.split(/(?<=[.!?])\s+/).map((part) => part.trim()).filter(Boolean);
+    const head = sentences[0] ?? topicFromBlock(block);
+    lines.push({ depth: 1, text: clipText(head.slice(0, 140)) });
+    for (const sentence of sentences.slice(1, 4)) {
+      lines.push({ depth: 2, text: clipText(sentence.slice(0, 140)) });
+    }
+  }
+
+  return lines.slice(0, MAX_NODES);
+}
+
+function looksLikeOutline(lines: OutlineLine[]): boolean {
+  if (lines.length < 2) return false;
+  if (lines.some((line) => line.depth > 0)) return true;
+  const average = lines.reduce((sum, line) => sum + line.text.length, 0) / lines.length;
+  return average <= 60;
+}
+
+function topicFromBlock(block: string): string {
+  const first = block.split(/(?<=[.!?])\s+/)[0]?.trim() || block.trim();
+  return first.slice(0, 140) || "Topic";
 }
 
 function indentLevel(indent: string): number {

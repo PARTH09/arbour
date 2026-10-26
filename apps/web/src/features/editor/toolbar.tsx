@@ -1,7 +1,17 @@
 "use client";
 
-import { DENSITY_PRESETS, documentFromOutline, documentRoleLabel, parseDocument, THEMES, type LayoutOrientation } from "@arbour/mindmap-core";
 import {
+  childrenOf,
+  DENSITY_PRESETS,
+  documentFromDocumentText,
+  documentFromOutline,
+  documentRoleLabel,
+  parseDocument,
+  THEMES,
+  type LayoutOrientation,
+} from "@arbour/mindmap-core";
+import {
+  CircleHelp,
   Download,
   Grid3x3,
   ListTree,
@@ -21,6 +31,8 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from "@/components/ui/menu";
 import { exportActiveDocument } from "@/features/editor/export-document";
 import { fitActiveDocument } from "@/features/editor/fit-document";
+import { extractTextFromPdf } from "@/features/editor/pdf-import";
+import { loadSampleDocument, SAMPLE_OPTIONS } from "@/features/editor/load-sample";
 import { useActiveDocument, useDocumentAccess, useEditor, type SaveStatus } from "@/features/editor/store";
 
 const ORIENTATIONS: { id: LayoutOrientation; label: string }[] = [
@@ -52,7 +64,9 @@ export function Toolbar() {
   const toggleMinimap = useEditor((state) => state.toggleMinimap);
   const setTheme = useEditor((state) => state.setTheme);
   const setShareOpen = useEditor((state) => state.setShareOpen);
-  const setShortcutsOpen = useEditor((state) => state.setShortcutsOpen);
+  const setSettingsOpen = useEditor((state) => state.setSettingsOpen);
+  const setHelpOpen = useEditor((state) => state.setHelpOpen);
+  const setTranslateOpen = useEditor((state) => state.setTranslateOpen);
   const showBanner = useEditor((state) => state.showBanner);
   const importDocument = useEditor((state) => state.importDocument);
   const trashDocument = useEditor((state) => state.trashDocument);
@@ -167,9 +181,10 @@ export function Toolbar() {
         <IconButton label={theme === "dark" ? "Use light theme" : "Use dark theme"} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
           {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
         </IconButton>
-        <span className="ml-1 flex h-7 w-7 items-center justify-center rounded-full bg-accent text-[11px] font-semibold text-white" title={displayName}>
-          {initials(displayName)}
-        </span>
+        <div className="mx-0.5 hidden h-5 w-px bg-line sm:block" />
+        <IconButton label="Help" shortcut="?" onClick={() => setHelpOpen(true, null)}>
+          <CircleHelp size={16} />
+        </IconButton>
         <Menu>
           <MenuTrigger asChild>
             <button type="button" aria-label="Export" className="inline-flex h-8 w-8 items-center justify-center rounded-lg hover:bg-accent-soft">
@@ -186,6 +201,15 @@ export function Toolbar() {
         <IconButton label="Share" onClick={() => setShareOpen(true)}>
           <Share2 size={16} />
         </IconButton>
+        <button
+          type="button"
+          className="ml-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-accent text-[11px] font-semibold text-white hover:opacity-90"
+          title={displayName}
+          aria-label={`Account: ${displayName}. Open settings.`}
+          onClick={() => setSettingsOpen(true)}
+        >
+          {initials(displayName)}
+        </button>
         <Menu>
           <MenuTrigger asChild>
             <button type="button" aria-label="Document options" className="h-8 rounded-lg px-2 text-xs hover:bg-accent-soft">
@@ -207,49 +231,124 @@ export function Toolbar() {
               </MenuSub>
             ) : null}
             {access.canEdit ? <MenuItem onSelect={() => dispatch({ type: "relayout" })}>Tidy layout</MenuItem> : null}
-            <MenuItem onSelect={() => setShortcutsOpen(true)}>Keyboard shortcuts</MenuItem>
+            {access.canEdit ? (
+              <MenuItem
+                onSelect={() => {
+                  const ids = Object.values(document.nodes)
+                    .filter((node) => childrenOf(document, node.id).length > 0)
+                    .map((node) => node.id);
+                  dispatch({ type: "setCollapsed", ids, collapsed: true });
+                }}
+              >
+                Collapse all
+              </MenuItem>
+            ) : null}
+            {access.canEdit ? (
+              <MenuItem
+                onSelect={() => {
+                  const ids = Object.values(document.nodes)
+                    .filter((node) => childrenOf(document, node.id).length > 0)
+                    .map((node) => node.id);
+                  dispatch({ type: "setCollapsed", ids, collapsed: false });
+                }}
+              >
+                Expand all
+              </MenuItem>
+            ) : null}
+            {access.canEdit ? (
+              <MenuSub>
+                <MenuSubTrigger>Open sample…</MenuSubTrigger>
+                <MenuSubContent>
+                  {SAMPLE_OPTIONS.map((sample) => (
+                    <MenuItem
+                      key={sample.id}
+                      onSelect={() => {
+                        void (async () => {
+                          try {
+                            showBanner("Loading sample…");
+                            const imported = await loadSampleDocument(sample.id);
+                            importDocument(imported);
+                            showBanner(`Loaded ${sample.label}.`);
+                          } catch (error) {
+                            showBanner(error instanceof Error ? error.message : "Could not load that sample.");
+                          }
+                        })();
+                      }}
+                    >
+                      {sample.label}
+                    </MenuItem>
+                  ))}
+                </MenuSubContent>
+              </MenuSub>
+            ) : null}
+            {access.canEdit ? <MenuItem onSelect={() => setTranslateOpen(true)}>Translate map…</MenuItem> : null}
+            <MenuItem onSelect={() => setHelpOpen(true, null)}>Help & learning</MenuItem>
+            <MenuItem onSelect={() => setHelpOpen(true, "shortcuts")}>Keyboard shortcuts</MenuItem>
             <MenuItem onSelect={() => void exportActiveDocument("json")}>Export as JSON</MenuItem>
             {access.canEdit ? <MenuItem
               onSelect={() => {
                 const input = window.document.createElement("input");
                 input.type = "file";
-                input.accept = "application/json,.json,.txt,.md,.markdown,text/plain,text/markdown";
+                input.accept =
+                  "application/json,.json,.txt,.md,.markdown,text/plain,text/markdown,application/pdf,.pdf";
                 input.onchange = async () => {
                   const file = input.files?.[0];
                   if (!file) return;
-                  const text = await file.text();
-                  if (file.size > 2_000_000) {
+                  if (file.size > 8_000_000) {
                     showBanner("That file is too large to import.");
                     return;
                   }
                   const name = file.name.replace(/\.[^.]+$/, "");
-                  const looksJson = file.name.toLowerCase().endsWith(".json") || /^\s*[{\[]/.test(text);
-                  if (looksJson) {
-                    try {
-                      const parsed = JSON.parse(text) as unknown;
-                      const result = parseDocument(parsed);
-                      if (!result.ok) {
-                        showBanner(result.error);
+                  const lower = file.name.toLowerCase();
+                  try {
+                    if (lower.endsWith(".pdf")) {
+                      showBanner("Reading PDF…");
+                      const text = await extractTextFromPdf(file);
+                      if (!text.trim()) {
+                        showBanner("No text found in that PDF. Scanned pages need OCR first.");
                         return;
                       }
-                      importDocument(result.document);
-                      return;
-                    } catch {
-                      showBanner("That JSON file isn't a valid Arbour map.");
+                      const imported = documentFromDocumentText(text, name);
+                      if (!imported) {
+                        showBanner("Could not build a mind map from that PDF.");
+                        return;
+                      }
+                      importDocument(imported);
+                      showBanner("Mind map built from the PDF.");
                       return;
                     }
+                    const text = await file.text();
+                    const looksJson = lower.endsWith(".json") || /^\s*[{\[]/.test(text);
+                    if (looksJson) {
+                      try {
+                        const parsed = JSON.parse(text) as unknown;
+                        const result = parseDocument(parsed);
+                        if (!result.ok) {
+                          showBanner(result.error);
+                          return;
+                        }
+                        importDocument(result.document);
+                        return;
+                      } catch {
+                        showBanner("That JSON file isn't a valid Arbour map.");
+                        return;
+                      }
+                    }
+                    const imported =
+                      documentFromOutline(text, name) ?? documentFromDocumentText(text, name);
+                    if (!imported) {
+                      showBanner("That file isn't a valid outline, Markdown, or document.");
+                      return;
+                    }
+                    importDocument(imported);
+                  } catch {
+                    showBanner("Import failed. Try a smaller file or a text-based PDF.");
                   }
-                  const imported = documentFromOutline(text, name);
-                  if (!imported) {
-                    showBanner("That file isn't a valid outline or Markdown mind map.");
-                    return;
-                  }
-                  importDocument(imported);
                 };
                 input.click();
               }}
             >
-              Import
+              Import PDF / outline
             </MenuItem> : null}
             {access.canManage ? <MenuSeparator /> : null}
             {access.canManage ? <MenuItem onSelect={() => trashDocument(document.id)}>Move to trash</MenuItem> : null}

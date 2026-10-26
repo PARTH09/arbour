@@ -7,6 +7,7 @@ export const SHORTCUTS = [
   { keys: "M", label: "Add a detached topic" },
   { keys: "Shift Tab", label: "Promote one level" },
   { keys: "Mod /", label: "Collapse or expand" },
+  { keys: "Mod Shift /", label: "Collapse or expand all" },
   { keys: "Mod Shift U", label: "Add or edit a link" },
   { keys: "F2", label: "Rename the selection" },
   { keys: "Delete", label: "Delete topics or a cross-link" },
@@ -29,6 +30,6 @@ export const SHORTCUTS = [
   { keys: "2", label: "Fit the selection" },
   { keys: "Shift 1", label: "Fit the map" },
   { keys: "Mod \\", label: "Show or hide the outline" },
-  { keys: "?", label: "Show these shortcuts" },
+  { keys: "?", label: "Open Help" },
   { keys: "Esc", label: "Cancel the current action" },
 ] as const;

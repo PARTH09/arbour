@@ -80,9 +80,13 @@ interface EditorState {
   query: string;
   libraryView: LibraryView;
   shortcutsOpen: boolean;
+  helpOpen: boolean;
+  helpSection: string | null;
   shareOpen: boolean;
   settingsOpen: boolean;
   imageOpen: boolean;
+  translateOpen: boolean;
+  moveNodeId: string | null;
   zoom: number;
   hydrate: () => void;
   dispatch: (command: Command, options?: { coalesceKey?: string; edit?: boolean; selectAll?: boolean }) => void;
@@ -125,9 +129,12 @@ interface EditorState {
   toggleGrid: () => void;
   toggleOutline: () => void;
   setShortcutsOpen: (open: boolean) => void;
+  setHelpOpen: (open: boolean, section?: string | null) => void;
   setShareOpen: (open: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
   setImageOpen: (open: boolean) => void;
+  setTranslateOpen: (open: boolean) => void;
+  setMoveNodeId: (id: string | null) => void;
   showBanner: (message: string) => void;
   importDocument: (document: MindMapDocument) => void;
 }
@@ -382,10 +389,14 @@ export const useEditor = create<EditorState>((set, get) => ({
   query: "",
   libraryView: "home",
   shortcutsOpen: false,
+  helpOpen: false,
+  helpSection: null,
   shareOpen: false,
   shareFolderId: null,
   settingsOpen: false,
   imageOpen: false,
+  translateOpen: false,
+  moveNodeId: null,
   zoom: 1,
 
   hydrate: () => {
@@ -1023,10 +1034,22 @@ export const useEditor = create<EditorState>((set, get) => ({
     set({ showOutline: !get().showOutline });
     schedulePersist(false);
   },
-  setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
+  setShortcutsOpen: (open) => {
+    if (open) get().setHelpOpen(true, "shortcuts");
+    else get().setHelpOpen(false, null);
+  },
+  setHelpOpen: (helpOpen, section = null) =>
+    set({
+      helpOpen,
+      // null opens the category home; a section id drills into that category.
+      helpSection: helpOpen ? section : null,
+      shortcutsOpen: false,
+    }),
   setShareOpen: (shareOpen) => set({ shareOpen, shareFolderId: shareOpen ? get().shareFolderId : null }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setImageOpen: (imageOpen) => set({ imageOpen }),
+  setTranslateOpen: (translateOpen) => set({ translateOpen }),
+  setMoveNodeId: (moveNodeId) => set({ moveNodeId }),
   showBanner: (banner) => set({ banner }),
 
   importDocument: (document) => {

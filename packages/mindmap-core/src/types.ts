@@ -39,6 +39,8 @@ export type LayoutOrientation =
   | "radial";
 
 export type LayoutDensity = "compact" | "comfortable" | "expanded";
+/** Cards = filled shapes. Lines = labels joined by connectors only. */
+export type NodeLook = "cards" | "lines";
 
 export interface Point {
   x: number;
@@ -114,6 +116,7 @@ export interface LayoutSettings {
   rootGap: number;
   /** Extra main-axis space added at each depth below the root. */
   levelGap: number;
+  nodeLook: NodeLook;
 }
 
 export interface MindMapDocument {
@@ -176,6 +179,8 @@ export type Command =
   | { type: "setSide"; nodeId: NodeId; side: Side }
   | { type: "promote"; nodeId: NodeId }
   | { type: "toggleCollapse"; nodeId: NodeId }
+  | { type: "setCollapsed"; ids: NodeId[]; collapsed: boolean }
+  | { type: "renameMany"; updates: { nodeId: NodeId; text: string }[] }
   | { type: "duplicate"; nodeId: NodeId }
   | {
       type: "patchNodes";

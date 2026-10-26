@@ -1,12 +1,35 @@
 "use client";
 
-import { Hand, Image, MousePointer2, Spline, StickyNote, Type, ZoomIn, ZoomOut } from "lucide-react";
+import {
+  childrenOf,
+  documentFromDocumentText,
+  documentFromOutline,
+  parseDocument,
+  sanitizeHttpUrl,
+  sanitizeImageUrl,
+} from "@arbour/mindmap-core";
+import {
+  CircleHelp,
+  FileUp,
+  FoldVertical,
+  Hand,
+  Image,
+  Languages,
+  MousePointer2,
+  Plus,
+  Sparkles,
+  Spline,
+  StickyNote,
+  Type,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import { useReactFlow } from "@xyflow/react";
 import { useRef, useState, type ReactNode } from "react";
 
-import { sanitizeHttpUrl, sanitizeImageUrl } from "@arbour/mindmap-core";
 import { IconButton } from "@/components/ui/icon-button";
 import { Modal } from "@/components/ui/dialog";
+import { extractTextFromPdf } from "@/features/editor/pdf-import";
 import { fitActiveDocument } from "@/features/editor/fit-document";
 import { useActiveDocument, useDocumentAccess, useEditor } from "@/features/editor/store";
 
@@ -19,6 +42,10 @@ export function CanvasControls() {
   const selection = useEditor((state) => state.selection);
   const showMinimap = useEditor((state) => state.showMinimap);
   const toggleMinimap = useEditor((state) => state.toggleMinimap);
+  const setTranslateOpen = useEditor((state) => state.setTranslateOpen);
+  const setHelpOpen = useEditor((state) => state.setHelpOpen);
+  const showBanner = useEditor((state) => state.showBanner);
+  const importDocument = useEditor((state) => state.importDocument);
   const document = useActiveDocument();
   const access = useDocumentAccess();
   const { zoomIn, zoomOut, setViewport, getNodesBounds } = useReactFlow();
@@ -26,6 +53,7 @@ export function CanvasControls() {
   const [imageUrl, setImageUrl] = useState("");
   const [imageError, setImageError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
+  const importInput = useRef<HTMLInputElement>(null);
 
   const add = (nodeType: "topic" | "note" | "text") => {
     if (!document) return;
@@ -52,6 +80,72 @@ export function CanvasControls() {
     setTool("select");
   };
 
+  const toggleCollapseAll = () => {
+    if (!document) return;
+    const ids = Object.values(document.nodes)
+      .filter((node) => childrenOf(document, node.id).length > 0)
+      .map((node) => node.id);
+    if (!ids.length) {
+      showBanner("Nothing to collapse on this map.");
+      return;
+    }
+    const anyExpanded = ids.some((id) => !document.nodes[id]?.collapsed);
+    dispatch({ type: "setCollapsed", ids, collapsed: anyExpanded });
+    showBanner(anyExpanded ? "Collapsed all branches." : "Expanded all branches.");
+  };
+
+  const importFile = async (file: File) => {
+    if (file.size > 8_000_000) {
+      showBanner("That file is too large to import.");
+      return;
+    }
+    const name = file.name.replace(/\.[^.]+$/, "");
+    const lower = file.name.toLowerCase();
+    try {
+      if (lower.endsWith(".pdf")) {
+        showBanner("Reading PDF…");
+        const text = await extractTextFromPdf(file);
+        if (!text.trim()) {
+          showBanner("No text found in that PDF. Scanned pages need OCR first.");
+          return;
+        }
+        const imported = documentFromDocumentText(text, name);
+        if (!imported) {
+          showBanner("Could not build a mind map from that PDF.");
+          return;
+        }
+        importDocument(imported);
+        showBanner("Mind map built from the PDF.");
+        return;
+      }
+      const text = await file.text();
+      const looksJson = lower.endsWith(".json") || /^\s*[{\[]/.test(text);
+      if (looksJson) {
+        try {
+          const parsed = JSON.parse(text) as unknown;
+          const result = parseDocument(parsed);
+          if (!result.ok) {
+            showBanner(result.error);
+            return;
+          }
+          importDocument(result.document);
+          return;
+        } catch {
+          showBanner("That JSON file isn't a valid Arbour map.");
+          return;
+        }
+      }
+      const imported = documentFromOutline(text, name) ?? documentFromDocumentText(text, name);
+      if (!imported) {
+        showBanner("That file isn't a valid outline, Markdown, or document.");
+        return;
+      }
+      importDocument(imported);
+    } catch {
+      showBanner("Import failed. Try a smaller file or a text-based PDF.");
+    }
+  };
+
   if (!document) return null;
 
   return (
@@ -63,10 +157,12 @@ export function CanvasControls() {
         <ToolButton label="Pan" shortcut="Space" active={tool === "pan"} onClick={() => setTool("pan")}>
           <Hand size={16} />
         </ToolButton>
+
         {access.canEdit ? (
           <>
+            <ToolDivider />
             <ToolButton label="Add topic" shortcut="Tab" onClick={() => add("topic")}>
-              <span className="text-base leading-none">+</span>
+              <Plus size={16} />
             </ToolButton>
             <ToolButton label="Add cross-link" active={tool === "connect"} onClick={() => setTool("connect")}>
               <Spline size={16} />
@@ -77,12 +173,56 @@ export function CanvasControls() {
             <ToolButton label="Add text" onClick={() => add("text")}>
               <Type size={16} />
             </ToolButton>
-            <ToolButton label="Add image" onClick={() => { setImageOpen(true); setImageError(""); }}>
+            <ToolButton
+              label="Add image"
+              onClick={() => {
+                setImageOpen(true);
+                setImageError("");
+              }}
+            >
               <Image size={16} />
+            </ToolButton>
+
+            <ToolDivider />
+            <ToolButton label="Translate map" onClick={() => setTranslateOpen(true)}>
+              <Languages size={16} />
+            </ToolButton>
+            <ToolButton label="Collapse or expand all" shortcut="⇧⌘/" onClick={toggleCollapseAll}>
+              <FoldVertical size={16} />
+            </ToolButton>
+            <ToolButton
+              label="Tidy layout"
+              onClick={() => {
+                dispatch({ type: "relayout" });
+                showBanner("Layout tidied.");
+              }}
+            >
+              <Sparkles size={16} />
+            </ToolButton>
+            <ToolButton label="Import PDF or outline" onClick={() => importInput.current?.click()}>
+              <FileUp size={16} />
             </ToolButton>
           </>
         ) : null}
+
+        <ToolDivider />
+        <ToolButton label="Help & learning" shortcut="?" onClick={() => setHelpOpen(true, null)}>
+          <CircleHelp size={16} />
+        </ToolButton>
       </div>
+
+      <input
+        ref={importInput}
+        type="file"
+        accept="application/json,.json,.txt,.md,.markdown,text/plain,text/markdown,application/pdf,.pdf"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) void importFile(file);
+        }}
+      />
+
       <div className="absolute right-3 bottom-3 z-20 flex items-center gap-1 rounded-2xl border border-line bg-panel p-1 shadow-lg">
         <IconButton label="Zoom out" onClick={() => zoomOut({ duration: 160 })}>
           <ZoomOut size={16} />
@@ -90,7 +230,11 @@ export function CanvasControls() {
         <IconButton label="Zoom in" onClick={() => zoomIn({ duration: 160 })}>
           <ZoomIn size={16} />
         </IconButton>
-        <button type="button" className="h-8 rounded-lg px-2 text-xs hover:bg-accent-soft" onClick={() => void fitActiveDocument({ setViewport, getNodesBounds }, { duration: 180 })}>
+        <button
+          type="button"
+          className="h-8 rounded-lg px-2 text-xs hover:bg-accent-soft"
+          onClick={() => void fitActiveDocument({ setViewport, getNodesBounds }, { duration: 180 })}
+        >
           Fit
         </button>
         <button
@@ -191,6 +335,10 @@ function readFileAsDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error("read failed"));
     reader.readAsDataURL(file);
   });
+}
+
+function ToolDivider() {
+  return <div className="mx-1 my-0.5 h-px bg-line" role="separator" />;
 }
 
 function ToolButton({

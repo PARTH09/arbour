@@ -120,16 +120,18 @@ export function Canvas() {
 
   const edges = useMemo<BranchFlowEdge[]>(() => {
     if (!document) return [];
-    const huge = Object.keys(document.nodes).length >= 16;
-    const layoutRight =
-      document.layout.orientation === "right" || document.layout.orientation === "balanced";
+    // Only force right-side handles for pure left→right maps. Balanced welcome maps
+    // must pick handles from each branch side or left leaves grow outer stubs.
+    const preferRight = edgeKindTreeRight(document.layout.orientation);
     return Object.values(document.edges)
       .filter((edge) => isNodeVisible(document, edge.sourceId) && isNodeVisible(document, edge.targetId))
       .map((edge) => {
         const source = positioned(document.nodes[edge.sourceId], dragPositions);
         const target = positioned(document.nodes[edge.targetId], dragPositions);
-        const preferRight = edge.kind === "tree" && (huge || layoutRight);
-        const handles = connectorHandles(source, target, { preferRight });
+        const handles = connectorHandles(source, target, {
+          preferRight: edge.kind === "tree" && preferRight,
+          layout: document.layout.orientation,
+        });
         return {
           id: edge.id,
           source: edge.sourceId,
@@ -397,6 +399,9 @@ function CanvasMenu({ menu, onClose }: { menu: { x: number; y: number; nodeId?: 
           ? [{ label: "Add parent", action: () => dispatch({ type: "addParent", nodeId: node.id }, { edit: true }) }]
           : []),
         { label: "Duplicate", action: () => dispatch({ type: "duplicate", nodeId: node.id }) },
+        ...(node.id !== document.rootId
+          ? [{ label: "Move under…", action: () => useEditor.getState().setMoveNodeId(node.id) }]
+          : []),
         ...(node.id !== document.rootId && !node.floating
           ? [{
               label: "Detach",
@@ -474,6 +479,10 @@ function isUserViewportEvent(event: MouseEvent | TouchEvent | null) {
 function positioned(node: MindNode, overrides: Record<string, { x: number; y: number }>): MindNode {
   const position = overrides[node.id];
   return position ? { ...node, position } : node;
+}
+
+function edgeKindTreeRight(orientation: MindMapDocument["layout"]["orientation"]): boolean {
+  return orientation === "right";
 }
 
 function chevronFor(document: MindMapDocument, node: MindNode): "left" | "right" | "up" | "down" {

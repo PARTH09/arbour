@@ -78,6 +78,7 @@ export const documentSchema = z.object({
     verticalGap: z.number().min(0).max(160),
     rootGap: z.number().min(8).max(280),
     levelGap: z.number().min(0).max(80),
+    nodeLook: z.enum(["cards", "lines"]).optional().default("cards"),
   }),
   updatedAt: z.string().min(1).max(40),
 });

@@ -1,28 +1,38 @@
 "use client";
 
 import {
+  createsCycle,
   documentRoleLabel,
+  isNodeVisible,
   toOutline,
   workspaceRoleLabel,
   type DocumentRole,
   type WorkspaceRole,
 } from "@arbour/mindmap-core";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Modal } from "@/components/ui/dialog";
 import { downloadText, fileSlug } from "@/lib/utils";
-import { SHORTCUTS } from "@/features/editor/shortcuts";
+import { HelpCenter } from "@/features/editor/help-center";
 import { folderAccess, useActiveDocument, useDocumentAccess, useEditor } from "@/features/editor/store";
+import {
+  TRANSLATE_LANGUAGES,
+  translateTexts,
+  type TranslateLanguage,
+} from "@/features/editor/translate";
 
 export function Dialogs() {
   const document = useActiveDocument();
-  const shortcutsOpen = useEditor((state) => state.shortcutsOpen);
   const shareOpen = useEditor((state) => state.shareOpen);
   const shareFolderId = useEditor((state) => state.shareFolderId);
   const settingsOpen = useEditor((state) => state.settingsOpen);
-  const setShortcutsOpen = useEditor((state) => state.setShortcutsOpen);
+  const translateOpen = useEditor((state) => state.translateOpen);
+  const moveNodeId = useEditor((state) => state.moveNodeId);
   const setShareOpen = useEditor((state) => state.setShareOpen);
   const setSettingsOpen = useEditor((state) => state.setSettingsOpen);
+  const setTranslateOpen = useEditor((state) => state.setTranslateOpen);
+  const setMoveNodeId = useEditor((state) => state.setMoveNodeId);
+  const dispatch = useEditor((state) => state.dispatch);
   const workspaceName = useEditor((state) => state.workspaceName);
   const displayName = useEditor((state) => state.displayName);
   const renameWorkspace = useEditor((state) => state.renameWorkspace);
@@ -48,8 +58,22 @@ export function Dialogs() {
   const [person, setPerson] = useState("");
   const [grantMemberId, setGrantMemberId] = useState("");
   const [grantRole, setGrantRole] = useState<DocumentRole>("viewer");
+  const [targetLang, setTargetLang] = useState<TranslateLanguage>("hi");
+  const [sourceLang, setSourceLang] = useState<TranslateLanguage | "auto">("auto");
+  const [translating, setTranslating] = useState(false);
+  const [translateProgress, setTranslateProgress] = useState("");
+  const [moveParentId, setMoveParentId] = useState("");
   const actor = members.find((member) => member.id === activeMemberId);
   const workspaceOwner = actor?.workspaceRole === "owner";
+  const moveNode = document && moveNodeId ? document.nodes[moveNodeId] : null;
+  const moveTargets = useMemo(() => {
+    if (!document || !moveNodeId) return [];
+    return Object.values(document.nodes)
+      .filter((node) => isNodeVisible(document, node.id))
+      .filter((node) => node.id !== moveNodeId)
+      .filter((node) => !createsCycle(document, moveNodeId, node.id))
+      .sort((a, b) => a.text.localeCompare(b.text));
+  }, [document, moveNodeId]);
 
   useEffect(() => {
     if (settingsOpen) {
@@ -58,23 +82,14 @@ export function Dialogs() {
     }
   }, [settingsOpen, workspaceName, displayName]);
 
+  useEffect(() => {
+    if (moveNodeId && moveTargets[0]) setMoveParentId(moveTargets[0].id);
+    else setMoveParentId("");
+  }, [moveNodeId, moveTargets]);
+
   return (
     <>
-      <Modal
-        open={shortcutsOpen}
-        onOpenChange={setShortcutsOpen}
-        title="Keyboard shortcuts"
-        description="Shortcuts stay out of the way while you are typing."
-      >
-        <ul className="max-h-80 space-y-1 overflow-auto">
-          {SHORTCUTS.map((shortcut) => (
-            <li key={shortcut.keys} className="flex items-center justify-between gap-4 rounded-lg px-1 py-1.5 text-sm">
-              <span>{shortcut.label}</span>
-              <kbd className="rounded-md bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-muted">{shortcut.keys}</kbd>
-            </li>
-          ))}
-        </ul>
-      </Modal>
+      <HelpCenter />
       <Modal
         open={shareOpen}
         onOpenChange={setShareOpen}
@@ -399,6 +414,125 @@ export function Dialogs() {
                 <span className="ml-2 text-xs text-muted">{workspaceRoleLabel(member.workspaceRole)}</span>
               </button>
             ))}
+          </div>
+        </div>
+      </Modal>
+      <Modal
+        open={translateOpen}
+        onOpenChange={setTranslateOpen}
+        title="Translate map"
+        description="Translate every topic label. Uses the browser translator when available, otherwise a free online service."
+      >
+        <div className="space-y-3">
+          <label className="flex items-center justify-between gap-3 text-sm">
+            From
+            <select
+              aria-label="Source language"
+              className="h-9 rounded-lg border border-line bg-canvas px-2"
+              value={sourceLang}
+              onChange={(event) => setSourceLang(event.target.value as TranslateLanguage | "auto")}
+            >
+              <option value="auto">Detect / English</option>
+              {TRANSLATE_LANGUAGES.map((language) => (
+                <option key={language.id} value={language.id}>
+                  {language.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center justify-between gap-3 text-sm">
+            To
+            <select
+              aria-label="Target language"
+              className="h-9 rounded-lg border border-line bg-canvas px-2"
+              value={targetLang}
+              onChange={(event) => setTargetLang(event.target.value as TranslateLanguage)}
+            >
+              {TRANSLATE_LANGUAGES.map((language) => (
+                <option key={language.id} value={language.id}>
+                  {language.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {translateProgress ? <p className="text-xs text-muted">{translateProgress}</p> : null}
+          <div className="flex justify-end gap-2">
+            <button type="button" className="h-8 rounded-lg px-3 text-sm" onClick={() => setTranslateOpen(false)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="h-8 rounded-lg bg-accent px-3 text-sm text-white disabled:opacity-50"
+              disabled={!document || translating || !access.canEdit}
+              onClick={async () => {
+                if (!document) return;
+                setTranslating(true);
+                setTranslateProgress("Translating…");
+                try {
+                  const nodes = Object.values(document.nodes);
+                  const texts = nodes.map((node) => node.text);
+                  const translated = await translateTexts(texts, targetLang, sourceLang, (done, total) => {
+                    setTranslateProgress(`Translated ${done} of ${total} unique labels…`);
+                  });
+                  dispatch({
+                    type: "renameMany",
+                    updates: nodes.map((node, index) => ({ nodeId: node.id, text: translated[index] ?? node.text })),
+                  });
+                  showBanner(`Map translated to ${TRANSLATE_LANGUAGES.find((item) => item.id === targetLang)?.label ?? targetLang}.`);
+                  setTranslateOpen(false);
+                } catch {
+                  showBanner("Translation failed. Check the network and try again.");
+                } finally {
+                  setTranslating(false);
+                  setTranslateProgress("");
+                }
+              }}
+            >
+              {translating ? "Working…" : "Translate"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+      <Modal
+        open={Boolean(moveNodeId && moveNode)}
+        onOpenChange={(open) => {
+          if (!open) setMoveNodeId(null);
+        }}
+        title="Move under another topic"
+        description={moveNode ? `Move “${moveNode.text}” (and its children) under a new parent.` : undefined}
+      >
+        <div className="space-y-3">
+          <label className="flex flex-col gap-1 text-sm">
+            New parent
+            <select
+              aria-label="New parent topic"
+              className="h-9 rounded-lg border border-line bg-canvas px-2"
+              value={moveParentId}
+              onChange={(event) => setMoveParentId(event.target.value)}
+            >
+              {moveTargets.map((node) => (
+                <option key={node.id} value={node.id}>
+                  {node.text || "Untitled"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="h-8 rounded-lg px-3 text-sm" onClick={() => setMoveNodeId(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="h-8 rounded-lg bg-accent px-3 text-sm text-white disabled:opacity-50"
+              disabled={!moveNodeId || !moveParentId || !access.canEdit}
+              onClick={() => {
+                if (!moveNodeId || !moveParentId || !document) return;
+                dispatch({ type: "reparent", nodeId: moveNodeId, parentId: moveParentId });
+                setMoveNodeId(null);
+              }}
+            >
+              Move
+            </button>
           </div>
         </div>
       </Modal>

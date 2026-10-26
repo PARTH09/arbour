@@ -1,4 +1,5 @@
 import { isNodeVisible } from "./document";
+import { buildEdgePath } from "./edges";
 import { escapeXml } from "./security";
 import { fontStack } from "./styles";
 import type { MindMapDocument, MindNode, NodeShape } from "./types";
@@ -122,10 +123,17 @@ function anchor(
   const oy = other.position.y + other.height / 2;
   const dx = ox - cx;
   const dy = oy - cy;
+  const underline = node.style.shape === "underline";
   let x = cx;
-  let y = cy;
-  if (Math.abs(dx) >= Math.abs(dy)) x += dx >= 0 ? node.width / 2 : -node.width / 2;
-  else y += dy >= 0 ? node.height / 2 : -node.height / 2;
+  let y = underline ? node.position.y + node.height - 2 : cy;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    x += dx >= 0 ? node.width / 2 : -node.width / 2;
+  } else if (underline) {
+    y = dy >= 0 ? node.position.y + node.height - 2 : node.position.y + 2;
+    // Keep x at center for vertical connections into underline leaves.
+  } else {
+    y += dy >= 0 ? node.height / 2 : -node.height / 2;
+  }
   return { x: x + offsetX, y: y + offsetY };
 }
 
@@ -136,14 +144,7 @@ function edgePath(
   tx: number,
   ty: number,
 ): string {
-  if (style === "straight") return `M ${sx} ${sy} L ${tx} ${ty}`;
-  if (style === "orthogonal") {
-    const mid = sx + (tx - sx) / 2;
-    return `M ${sx} ${sy} L ${mid} ${sy} L ${mid} ${ty} L ${tx} ${ty}`;
-  }
-  const dx = Math.max(36, Math.abs(tx - sx) * 0.45);
-  const dir = tx >= sx ? 1 : -1;
-  return `M ${sx} ${sy} C ${sx + dir * dx} ${sy}, ${tx - dir * dx} ${ty}, ${tx} ${ty}`;
+  return buildEdgePath(style, sx, sy, tx, ty);
 }
 
 function dashArray(style: MindNode["style"]["borderStyle"]): string {

@@ -26,6 +26,7 @@ export type TopicFlowNode = Node<
 
 const handleClass =
   "!h-2.5 !w-2.5 !border-2 !border-panel !bg-accent !opacity-0 transition-opacity group-hover:!opacity-100";
+const targetHandleClass = "!h-2 !w-2 !min-h-0 !min-w-0 !border-0 !bg-transparent !opacity-0";
 
 export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
   const node = data.node;
@@ -74,32 +75,37 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
   const radius =
     style.shape === "pill" ? 999 : style.shape === "ellipse" ? 999 : style.shape === "rectangle" ? 4 : 14;
   const sideWidth = borderless ? 0 : style.borderWidth;
+  const padX = underline || style.shape === "borderless" ? 6 : NODE_METRICS.paddingX;
+  const padY = underline || style.shape === "borderless" ? 4 : NODE_METRICS.paddingY;
   const label = `${node.emoji ? `${node.emoji} ` : ""}${node.text}`;
   const showAdd = access.canEdit && !editing && !data.connecting;
   const childAddStyle = addControlStyle(data.chevron, data.childCount > 0);
-  const siblingAddStyle = siblingControlStyle(data.chevron, data.childCount > 0);
+  const siblingAddStyle = siblingControlStyle(data.chevron);
+  // Underline leaves are transparent — mid-height handles make connectors cut through the text.
+  // Anchor side handles on the underline so the branch meets the bottom rule instead.
+  const sideHandleClass = underline ? "arbour-underline-handle" : undefined;
 
   return (
     <div className="group relative" role="group" aria-label={`${node.text} topic`} data-testid="topic" data-topic-text={node.text}>
-      <Handle id="target-left" type="target" position={Position.Left} className="!h-4 !w-4 !border-0 !bg-transparent !opacity-0" />
-      <Handle id="target-right" type="target" position={Position.Right} className="!h-4 !w-4 !border-0 !bg-transparent !opacity-0" />
-      <Handle id="target-top" type="target" position={Position.Top} className="!h-4 !w-4 !border-0 !bg-transparent !opacity-0" />
-      <Handle id="target-bottom" type="target" position={Position.Bottom} className="!h-4 !w-4 !border-0 !bg-transparent !opacity-0" />
+      <Handle id="target-left" type="target" position={Position.Left} className={cn(targetHandleClass, sideHandleClass)} />
+      <Handle id="target-right" type="target" position={Position.Right} className={cn(targetHandleClass, sideHandleClass)} />
+      <Handle id="target-top" type="target" position={Position.Top} className={targetHandleClass} />
+      <Handle id="target-bottom" type="target" position={Position.Bottom} className={targetHandleClass} />
       <div
         ref={body}
         role="button"
         tabIndex={-1}
         className={cn("relative text-center", selected && "z-10")}
         style={{
-          maxWidth: (node.nodeType === "note" ? NODE_METRICS.noteMaxTextWidth : NODE_METRICS.maxTextWidth) + NODE_METRICS.paddingX * 2,
-          minWidth: NODE_METRICS.minWidth,
-          padding: `${NODE_METRICS.paddingY}px ${NODE_METRICS.paddingX}px`,
+          maxWidth: (node.nodeType === "note" ? NODE_METRICS.noteMaxTextWidth : NODE_METRICS.maxTextWidth) + padX * 2,
+          minWidth: underline || style.shape === "borderless" ? 36 : NODE_METRICS.minWidth,
+          padding: `${padY}px ${padX}px`,
           background: borderless ? "transparent" : style.background,
           color: style.color,
           borderStyle: underline ? "solid" : borderless ? "none" : style.borderStyle,
           borderTopWidth: sideWidth,
           borderRightWidth: sideWidth,
-          borderBottomWidth: underline ? 1.5 : sideWidth,
+          borderBottomWidth: underline ? 2 : sideWidth,
           borderLeftWidth: sideWidth,
           borderColor: style.borderColor,
           borderRadius: borderless ? 0 : radius,
@@ -238,7 +244,7 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
           <button
             type="button"
             className={cn(
-              "nodrag nopan absolute z-20 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-panel text-muted shadow-sm transition opacity-70 hover:opacity-100 hover:bg-accent hover:text-white focus-visible:opacity-100",
+              "nodrag nopan absolute z-20 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-panel text-muted shadow-sm transition opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-accent hover:text-white focus-visible:opacity-100",
               selected && "opacity-100 ring-2 ring-accent/30",
             )}
             style={childAddStyle}
@@ -255,7 +261,7 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
           <button
             type="button"
             className={cn(
-              "nodrag nopan absolute z-20 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-panel text-muted shadow-sm transition opacity-70 hover:opacity-100 hover:bg-accent hover:text-white focus-visible:opacity-100",
+              "nodrag nopan absolute z-20 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-panel text-muted shadow-sm transition opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-accent hover:text-white focus-visible:opacity-100",
               selected && "opacity-100 ring-2 ring-accent/30",
             )}
             style={siblingAddStyle}
@@ -276,10 +282,10 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
           type="button"
           className="nodrag nopan absolute z-10 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-panel text-muted shadow-sm hover:text-ink"
           style={{
-            left: data.chevron === "left" ? -12 : data.chevron === "up" || data.chevron === "down" ? "50%" : undefined,
-            right: data.chevron === "right" ? -12 : undefined,
-            top: data.chevron === "up" ? -12 : data.chevron === "left" || data.chevron === "right" ? "50%" : undefined,
-            bottom: data.chevron === "down" ? -12 : undefined,
+            left: data.chevron === "left" ? -11 : data.chevron === "up" || data.chevron === "down" ? "50%" : undefined,
+            right: data.chevron === "right" ? -11 : undefined,
+            top: data.chevron === "up" ? -11 : data.chevron === "left" || data.chevron === "right" ? "50%" : undefined,
+            bottom: data.chevron === "down" ? -11 : undefined,
             transform:
               data.chevron === "left" || data.chevron === "right" ? "translateY(-50%)" : "translateX(-50%)",
           }}
@@ -306,8 +312,8 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
           {data.childCount}
         </span>
       ) : null}
-      <Handle id="source-left" type="source" position={Position.Left} className={cn(handleClass, data.connecting && "!opacity-100")} />
-      <Handle id="source-right" type="source" position={Position.Right} className={cn(handleClass, data.connecting && "!opacity-100")} />
+      <Handle id="source-left" type="source" position={Position.Left} className={cn(handleClass, sideHandleClass, data.connecting && "!opacity-100")} />
+      <Handle id="source-right" type="source" position={Position.Right} className={cn(handleClass, sideHandleClass, data.connecting && "!opacity-100")} />
       <Handle id="source-top" type="source" position={Position.Top} className={cn(handleClass, data.connecting && "!opacity-100")} />
       <Handle id="source-bottom" type="source" position={Position.Bottom} className={cn(handleClass, data.connecting && "!opacity-100")} />
     </div>
@@ -359,17 +365,18 @@ function indentText(text: string, indent: boolean, selectionStart: number, selec
 }
 
 function addControlStyle(direction: TopicFlowNode["data"]["chevron"], hasChildren: boolean) {
-  const offset = hasChildren ? -30 : -12;
+  // Sit just outside the collapse chevron when the branch already has children.
+  const offset = hasChildren ? -34 : -14;
   if (direction === "left") return { left: offset, top: "50%", transform: "translateY(-50%)" };
   if (direction === "up") return { left: "50%", top: offset, transform: "translateX(-50%)" };
   if (direction === "down") return { left: "50%", bottom: offset, transform: "translateX(-50%)" };
   return { right: offset, top: "50%", transform: "translateY(-50%)" };
 }
 
-function siblingControlStyle(direction: TopicFlowNode["data"]["chevron"], hasChildren: boolean) {
-  const offset = hasChildren ? -30 : -12;
+function siblingControlStyle(direction: TopicFlowNode["data"]["chevron"]) {
   if (direction === "up" || direction === "down") {
-    return { right: offset, top: "50%", transform: "translateY(-50%)" };
+    return { right: -14, top: "50%", transform: "translateY(-50%)" };
   }
-  return { left: "50%", bottom: offset, transform: "translateX(-50%)" };
+  // Sit below the topic so it never stacks on the side connector / chevron.
+  return { left: "50%", bottom: -14, transform: "translateX(-50%)" };
 }
