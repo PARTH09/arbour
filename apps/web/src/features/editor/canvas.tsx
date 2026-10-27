@@ -58,27 +58,23 @@ export function Canvas() {
   const [menu, setMenu] = useState<{ x: number; y: number; nodeId?: string } | null>(null);
   const dragOrigin = useRef<{ id: string; x: number; y: number; positions: Record<string, { x: number; y: number }> } | null>(null);
   const { setViewport: setFlowViewport, getNodesBounds } = useReactFlow();
-  const setFlowViewportRef = useRef(setFlowViewport);
-  const getNodesBoundsRef = useRef(getNodesBounds);
-  setFlowViewportRef.current = setFlowViewport;
-  getNodesBoundsRef.current = getNodesBounds;
   const userNavigated = useRef(false);
-  const fittedDocument = useRef<string | null>(null);
   const shouldFit = useRef(false);
   const fitAttempts = useRef(0);
-  if (document && fittedDocument.current !== document.id) {
-    fittedDocument.current = document.id;
-    const saved = useEditor.getState().viewports[document.id];
-    const untouched = !saved || (saved.x === 0 && saved.y === 0 && saved.zoom === 1);
-    shouldFit.current = untouched;
-    userNavigated.current = false;
-    fitAttempts.current = 0;
-  }
+  const documentId = document?.id;
   const layoutKey = document
     ? Object.values(document.nodes)
         .map((node) => `${node.id}:${Math.round(node.position.x)}:${Math.round(node.position.y)}:${node.width}x${node.height}`)
         .join("|")
     : "";
+
+  useEffect(() => {
+    if (!documentId) return;
+    const saved = useEditor.getState().viewports[documentId];
+    shouldFit.current = !saved || (saved.x === 0 && saved.y === 0 && saved.zoom === 1);
+    userNavigated.current = false;
+    fitAttempts.current = 0;
+  }, [documentId]);
 
   useEffect(() => {
     if (!shouldFit.current || userNavigated.current || fitAttempts.current >= 5) return;
@@ -87,12 +83,12 @@ export function Canvas() {
       fitAttempts.current += 1;
       if (fitAttempts.current >= 5) shouldFit.current = false;
       void fitActiveDocument(
-        { setViewport: setFlowViewportRef.current, getNodesBounds: getNodesBoundsRef.current },
+        { setViewport: setFlowViewport, getNodesBounds },
         { duration: 0 },
       );
     }, 90);
     return () => window.clearTimeout(timer);
-  }, [layoutKey]);
+  }, [getNodesBounds, layoutKey, setFlowViewport]);
 
   const nodes = useMemo<TopicFlowNode[]>(() => {
     if (!document) return [];

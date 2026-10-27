@@ -61,6 +61,8 @@ export function FormatBar() {
 
   useEffect(() => {
     if (!document || !firstSelected || edge) {
+      // The floating bar must disappear as soon as selection changes.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAnchor(null);
       return;
     }

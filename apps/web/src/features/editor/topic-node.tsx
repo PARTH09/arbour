@@ -47,6 +47,8 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
 
   useEffect(() => {
     if (!editing) {
+      // Keep the editable draft in sync after a command-driven rename.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDraft(node.text);
       original.current = node.text;
     }

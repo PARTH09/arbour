@@ -13,7 +13,7 @@ import {
   FileUp,
   FoldVertical,
   Hand,
-  Image,
+  Image as ImageIcon,
   Languages,
   MousePointer2,
   Plus,
@@ -180,7 +180,7 @@ export function CanvasControls() {
                 setImageError("");
               }}
             >
-              <Image size={16} />
+              <ImageIcon size={16} />
             </ToolButton>
 
             <ToolDivider />

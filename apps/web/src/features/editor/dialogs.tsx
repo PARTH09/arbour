@@ -75,17 +75,7 @@ export function Dialogs() {
       .sort((a, b) => a.text.localeCompare(b.text));
   }, [document, moveNodeId]);
 
-  useEffect(() => {
-    if (settingsOpen) {
-      setWorkspace(workspaceName);
-      setName(displayName);
-    }
-  }, [settingsOpen, workspaceName, displayName]);
-
-  useEffect(() => {
-    if (moveNodeId && moveTargets[0]) setMoveParentId(moveTargets[0].id);
-    else setMoveParentId("");
-  }, [moveNodeId, moveTargets]);
+  const selectedMoveParentId = moveParentId || moveTargets[0]?.id || "";
 
   return (
     <>
@@ -320,7 +310,13 @@ export function Dialogs() {
       </Modal>
       <Modal
         open={settingsOpen}
-        onOpenChange={setSettingsOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setWorkspace(workspaceName);
+            setName(displayName);
+          }
+          setSettingsOpen(open);
+        }}
         title="People on this device"
         description="Roles are stored in this browser. Anyone here can switch person. Sign-in is not built yet."
       >
@@ -507,7 +503,7 @@ export function Dialogs() {
             <select
               aria-label="New parent topic"
               className="h-9 rounded-lg border border-line bg-canvas px-2"
-              value={moveParentId}
+              value={selectedMoveParentId}
               onChange={(event) => setMoveParentId(event.target.value)}
             >
               {moveTargets.map((node) => (
@@ -524,10 +520,10 @@ export function Dialogs() {
             <button
               type="button"
               className="h-8 rounded-lg bg-accent px-3 text-sm text-white disabled:opacity-50"
-              disabled={!moveNodeId || !moveParentId || !access.canEdit}
+              disabled={!moveNodeId || !selectedMoveParentId || !access.canEdit}
               onClick={() => {
-                if (!moveNodeId || !moveParentId || !document) return;
-                dispatch({ type: "reparent", nodeId: moveNodeId, parentId: moveParentId });
+                if (!moveNodeId || !selectedMoveParentId || !document) return;
+                dispatch({ type: "reparent", nodeId: moveNodeId, parentId: selectedMoveParentId });
                 setMoveNodeId(null);
               }}
             >
