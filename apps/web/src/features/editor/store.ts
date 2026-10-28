@@ -87,6 +87,7 @@ interface EditorState {
   imageOpen: boolean;
   translateOpen: boolean;
   moveNodeId: string | null;
+  commandPaletteOpen: boolean;
   zoom: number;
   hydrate: () => void;
   dispatch: (command: Command, options?: { coalesceKey?: string; edit?: boolean; selectAll?: boolean }) => void;
@@ -135,6 +136,7 @@ interface EditorState {
   setImageOpen: (open: boolean) => void;
   setTranslateOpen: (open: boolean) => void;
   setMoveNodeId: (id: string | null) => void;
+  setCommandPaletteOpen: (open: boolean) => void;
   showBanner: (message: string) => void;
   importDocument: (document: MindMapDocument) => void;
 }
@@ -397,6 +399,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   imageOpen: false,
   translateOpen: false,
   moveNodeId: null,
+  commandPaletteOpen: false,
   zoom: 1,
 
   hydrate: () => {
@@ -1050,6 +1053,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   setImageOpen: (imageOpen) => set({ imageOpen }),
   setTranslateOpen: (translateOpen) => set({ translateOpen }),
   setMoveNodeId: (moveNodeId) => set({ moveNodeId }),
+  setCommandPaletteOpen: (commandPaletteOpen) => set({ commandPaletteOpen }),
   showBanner: (banner) => set({ banner }),
 
   importDocument: (document) => {

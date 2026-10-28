@@ -5,6 +5,7 @@ import { useEffect } from "react";
 
 import { TooltipProvider } from "@/components/ui/icon-button";
 import { Canvas } from "@/features/editor/canvas";
+import { CommandPalette } from "@/features/editor/command-palette";
 import { CanvasControls } from "@/features/editor/canvas-controls";
 import { Banner, Dialogs } from "@/features/editor/dialogs";
 import { FormatBar } from "@/features/editor/format-bar";
@@ -45,6 +46,7 @@ export function EditorShell() {
           </div>
         </div>
         <Hotkeys />
+        <CommandPalette />
         <Dialogs />
         <Banner />
       </ReactFlowProvider>

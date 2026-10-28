@@ -30,6 +30,7 @@ export function Hotkeys() {
   const stopEditing = useEditor((state) => state.stopEditing);
   const setTool = useEditor((state) => state.setTool);
   const setHelpOpen = useEditor((state) => state.setHelpOpen);
+  const setCommandPaletteOpen = useEditor((state) => state.setCommandPaletteOpen);
   const showGrid = useEditor((state) => state.showGrid);
   const toggleOutline = useEditor((state) => state.toggleOutline);
   const { zoomIn, zoomOut, setViewport, getNodesBounds, screenToFlowPosition } = useReactFlow();
@@ -38,6 +39,12 @@ export function Hotkeys() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!document || isTyping(event.target)) return;
       const mod = event.metaKey || event.ctrlKey;
+
+      if (mod && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandPaletteOpen(true);
+        return;
+      }
 
       if (event.key === "Escape") {
         stopEditing();
@@ -278,6 +285,7 @@ export function Hotkeys() {
     selection,
     setSelection,
     setHelpOpen,
+    setCommandPaletteOpen,
     setTool,
     setViewport,
     showGrid,

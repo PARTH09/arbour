@@ -104,6 +104,7 @@ export function Canvas() {
         data: {
           node,
           childCount: childrenOf(document, node.id).length,
+          isRoot: node.id === document.rootId,
           dropTarget: dropTarget === node.id,
           chevron: chevronFor(document, node),
           connecting: tool === "connect",

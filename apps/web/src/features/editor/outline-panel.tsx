@@ -1,6 +1,7 @@
 "use client";
 
 import { childrenOf } from "@arbour/mindmap-core";
+import { useReactFlow } from "@xyflow/react";
 
 import { useActiveDocument, useEditor } from "@/features/editor/store";
 
@@ -9,13 +10,21 @@ export function OutlinePanel() {
   const document = useActiveDocument();
   const selection = useEditor((state) => state.selection);
   const setSelection = useEditor((state) => state.setSelection);
+  const { setCenter } = useReactFlow();
   if (!open || !document) return null;
+
+  const selectAndReveal = (id: string) => {
+    const node = document.nodes[id];
+    if (!node) return;
+    setSelection([id]);
+    void setCenter(node.position.x + node.width / 2, node.position.y + node.height / 2, { duration: 180 });
+  };
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-l border-line bg-panel" aria-label="Outline">
       <div className="border-b border-line px-3 py-2 text-xs font-medium tracking-wide text-muted uppercase">Outline</div>
       <div className="min-h-0 flex-1 overflow-auto py-2">
-        <OutlineNodes parentId={null} rootId={document.rootId} depth={0} selection={selection} onSelect={(id) => setSelection([id])} />
+        <OutlineNodes parentId={null} rootId={document.rootId} depth={0} selection={selection} onSelect={selectAndReveal} />
       </div>
     </aside>
   );

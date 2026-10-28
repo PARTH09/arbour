@@ -6,7 +6,7 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
-import { ChevronRight, Link2, Plus } from "lucide-react";
+import { ChevronRight, Link2, MoveRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { fontStack, NODE_METRICS, parseMapHref, type MindNode } from "@arbour/mindmap-core";
@@ -17,6 +17,7 @@ export type TopicFlowNode = Node<
   {
     node: MindNode;
     childCount: number;
+    isRoot: boolean;
     dropTarget: boolean;
     chevron: "left" | "right" | "up" | "down";
     connecting: boolean;
@@ -35,6 +36,7 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
   const dispatch = useEditor((state) => state.dispatch);
   const stopEditing = useEditor((state) => state.stopEditing);
   const startEditing = useEditor((state) => state.startEditing);
+  const setMoveNodeId = useEditor((state) => state.setMoveNodeId);
   const openDocument = useEditor((state) => state.openDocument);
   const documents = useEditor((state) => state.documents);
   const access = useDocumentAccess();
@@ -84,6 +86,7 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
   const showAdd = access.canEdit && !editing && !data.connecting;
   const childAddStyle = addControlStyle(data.chevron, data.childCount > 0);
   const siblingAddStyle = siblingControlStyle(data.chevron);
+  const editorRows = Math.min(14, Math.max(2, estimatedEditorRows(draft)));
   // Underline leaves are transparent — mid-height handles make connectors cut through the text.
   // Anchor side handles on the underline so the branch meets the bottom rule instead.
   const sideHandleClass = underline ? "arbour-underline-handle" : undefined;
@@ -146,19 +149,20 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
           />
         ) : null}
         {editing ? (
-          <textarea
-            ref={field}
-            value={draft}
-            rows={Math.min(14, Math.max(2, draft.split("\n").length))}
-            aria-label={`Edit ${node.text}`}
-            className="nodrag nopan nowheel max-h-[50vh] w-full resize-y overflow-y-auto bg-transparent text-inherit outline-none"
-            style={{ textAlign: style.textAlign, font: "inherit" }}
-            onChange={(event) => {
-              const value = event.target.value;
-              setDraft(value);
-              dispatch({ type: "rename", nodeId: id, text: value }, { coalesceKey: `rename:${id}` });
-            }}
-            onKeyDown={(event) => {
+          <>
+            <textarea
+              ref={field}
+              value={draft}
+              rows={editorRows}
+              aria-label={`Edit ${node.text}`}
+              className="nodrag nopan nowheel max-h-[50vh] w-full resize-y overflow-y-auto bg-transparent text-inherit outline-none"
+              style={{ textAlign: style.textAlign, font: "inherit" }}
+              onChange={(event) => {
+                const value = event.target.value;
+                setDraft(value);
+                dispatch({ type: "rename", nodeId: id, text: value }, { coalesceKey: `rename:${id}` });
+              }}
+              onKeyDown={(event) => {
               const mod = event.metaKey || event.ctrlKey;
               if (event.key === "Escape") {
                 event.preventDefault();
@@ -193,12 +197,16 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
                 stopEditing();
                 dispatch({ type: "promote", nodeId: id });
               }
-            }}
-            onBlur={() => {
-              if (useEditor.getState().editingId === id) stopEditing();
-            }}
-            onPointerDown={(event) => event.stopPropagation()}
-          />
+              }}
+              onBlur={() => {
+                if (useEditor.getState().editingId === id) stopEditing();
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+            />
+            <p className="mt-1 text-right text-[10px] text-muted" aria-live="polite">
+              {draft.length.toLocaleString()} / 2,000
+            </p>
+          </>
         ) : (
           <div className="whitespace-pre-wrap break-words">{label}</div>
         )}
@@ -242,6 +250,13 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
           )
         ) : null}
       </div>
+      {access.canEdit && selected && !editing ? (
+        <div className="nodrag nopan absolute -top-8 left-1/2 z-30 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border border-line bg-panel p-0.5 shadow-md">
+          <button type="button" aria-label="Rename topic" title="Rename" className="rounded p-1 text-muted hover:bg-accent-soft hover:text-ink" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); startEditing(id, true); }}><Pencil size={12} /></button>
+          {node.parentId ? <button type="button" aria-label="Move topic" title="Move under another topic" className="rounded p-1 text-muted hover:bg-accent-soft hover:text-ink" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setMoveNodeId(id); }}><MoveRight size={12} /></button> : null}
+          {!data.isRoot ? <button type="button" aria-label="Delete topic" title="Delete" className="rounded p-1 text-muted hover:bg-danger/10 hover:text-danger" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); dispatch({ type: "deleteNodes", ids: [id] }); }}><Trash2 size={12} /></button> : null}
+        </div>
+      ) : null}
       {showAdd ? (
         <>
           <button
@@ -365,6 +380,12 @@ function indentText(text: string, indent: boolean, selectionStart: number, selec
     selectionStart: Math.max(lineStart, selectionStart + firstLineChange),
     selectionEnd: Math.max(lineStart, selectionEnd + (indent ? added : -removed)),
   };
+}
+
+function estimatedEditorRows(text: string) {
+  // The editor is intentionally wider than the finished topic. Estimate wrapped
+  // rows so a long paragraph expands before the user has to scroll.
+  return text.split("\n").reduce((total, line) => total + Math.max(1, Math.ceil(line.length / 58)), 0);
 }
 
 function addControlStyle(direction: TopicFlowNode["data"]["chevron"], hasChildren: boolean) {
