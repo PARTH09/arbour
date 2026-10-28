@@ -171,6 +171,12 @@ export function Hotkeys() {
         if (selection[0]) dispatch({ type: "duplicate", nodeId: selection[0] });
         return;
       }
+      if (mod && event.shiftKey && event.key.toLowerCase() === "m") {
+        event.preventDefault();
+        const id = selection[0];
+        if (id && id !== document.rootId) useEditor.getState().setMoveNodeId(id);
+        return;
+      }
       if (mod && event.key.toLowerCase() === "a") {
         event.preventDefault();
         setSelection(Object.values(document.nodes).filter((node) => isNodeVisible(document, node.id)).map((node) => node.id));

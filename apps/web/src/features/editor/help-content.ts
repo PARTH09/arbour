@@ -358,7 +358,7 @@ export const HELP_SECTIONS: HelpSection[] = [
             type: "steps",
             items: [
               "Drag a topic onto a new parent until the drop target highlights.",
-              "Or open the context menu → Move under… and pick a parent from the list.",
+              "Or select one topic and use Move in the format bar (⌘⇧M), or open the context menu → Move under… and pick a parent from the list.",
             ],
           },
           {

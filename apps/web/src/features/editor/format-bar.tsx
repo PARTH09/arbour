@@ -43,6 +43,7 @@ export function FormatBar() {
   const selection = useEditor((state) => state.selection);
   const selectedEdgeId = useEditor((state) => state.selectedEdgeId);
   const dispatch = useEditor((state) => state.dispatch);
+  const setMoveNodeId = useEditor((state) => state.setMoveNodeId);
   const access = useDocumentAccess();
   const [details, setDetails] = useState(false);
   const [iconsOpen, setIconsOpen] = useState(false);
@@ -187,6 +188,11 @@ export function FormatBar() {
         <BarButton active={first.style.textAlign === "right"} label="Align right" onClick={() => patch({ textAlign: "right" })}>
           <AlignRight size={14} />
         </BarButton>
+        {nodes.length === 1 && first.id !== document.rootId ? (
+          <BarButton label="Move under another topic" onClick={() => setMoveNodeId(first.id)}>
+            Move
+          </BarButton>
+        ) : null}
         <select
           aria-label="Font"
           value={first.style.fontFamily}

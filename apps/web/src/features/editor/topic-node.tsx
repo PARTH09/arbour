@@ -79,6 +79,7 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
   const sideWidth = borderless ? 0 : style.borderWidth;
   const padX = underline || style.shape === "borderless" ? 6 : NODE_METRICS.paddingX;
   const padY = underline || style.shape === "borderless" ? 4 : NODE_METRICS.paddingY;
+  const textMaxWidth = editing ? 520 : node.nodeType === "note" ? NODE_METRICS.noteMaxTextWidth : NODE_METRICS.maxTextWidth;
   const label = `${node.emoji ? `${node.emoji} ` : ""}${node.text}`;
   const showAdd = access.canEdit && !editing && !data.connecting;
   const childAddStyle = addControlStyle(data.chevron, data.childCount > 0);
@@ -99,8 +100,8 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
         tabIndex={-1}
         className={cn("relative text-center", selected && "z-10")}
         style={{
-          maxWidth: (node.nodeType === "note" ? NODE_METRICS.noteMaxTextWidth : NODE_METRICS.maxTextWidth) + padX * 2,
-          minWidth: underline || style.shape === "borderless" ? 36 : NODE_METRICS.minWidth,
+          maxWidth: textMaxWidth + padX * 2,
+          minWidth: editing ? 300 : underline || style.shape === "borderless" ? 36 : NODE_METRICS.minWidth,
           padding: `${padY}px ${padX}px`,
           background: borderless ? "transparent" : style.background,
           color: style.color,
@@ -148,9 +149,9 @@ export function TopicNode({ id, data, selected }: NodeProps<TopicFlowNode>) {
           <textarea
             ref={field}
             value={draft}
-            rows={Math.min(6, Math.max(1, draft.split("\n").length))}
+            rows={Math.min(14, Math.max(2, draft.split("\n").length))}
             aria-label={`Edit ${node.text}`}
-            className="nodrag nopan nowheel w-full resize-none bg-transparent text-inherit outline-none"
+            className="nodrag nopan nowheel max-h-[50vh] w-full resize-y overflow-y-auto bg-transparent text-inherit outline-none"
             style={{ textAlign: style.textAlign, font: "inherit" }}
             onChange={(event) => {
               const value = event.target.value;

@@ -7,6 +7,7 @@ import {
   toOutline,
   workspaceRoleLabel,
   type DocumentRole,
+  type MindNode,
   type WorkspaceRole,
 } from "@arbour/mindmap-core";
 import { useEffect, useMemo, useState } from "react";
@@ -63,6 +64,7 @@ export function Dialogs() {
   const [translating, setTranslating] = useState(false);
   const [translateProgress, setTranslateProgress] = useState("");
   const [moveParentId, setMoveParentId] = useState("");
+  const [moveQuery, setMoveQuery] = useState("");
   const actor = members.find((member) => member.id === activeMemberId);
   const workspaceOwner = actor?.workspaceRole === "owner";
   const moveNode = document && moveNodeId ? document.nodes[moveNodeId] : null;
@@ -75,7 +77,15 @@ export function Dialogs() {
       .sort((a, b) => a.text.localeCompare(b.text));
   }, [document, moveNodeId]);
 
-  const selectedMoveParentId = moveParentId || moveTargets[0]?.id || "";
+  const filteredMoveTargets = useMemo(() => {
+    const query = moveQuery.trim().toLowerCase();
+    if (!query || !document) return moveTargets;
+    return moveTargets.filter((node) => nodePath(document, node.id).toLowerCase().includes(query));
+  }, [document, moveQuery, moveTargets]);
+
+  const selectedMoveParentId = filteredMoveTargets.some((node) => node.id === moveParentId)
+    ? moveParentId
+    : filteredMoveTargets[0]?.id || "";
 
   return (
     <>
@@ -492,12 +502,27 @@ export function Dialogs() {
       <Modal
         open={Boolean(moveNodeId && moveNode)}
         onOpenChange={(open) => {
-          if (!open) setMoveNodeId(null);
+          if (!open) {
+            setMoveNodeId(null);
+            setMoveQuery("");
+            setMoveParentId("");
+          }
         }}
         title="Move under another topic"
         description={moveNode ? `Move “${moveNode.text}” (and its children) under a new parent.` : undefined}
       >
         <div className="space-y-3">
+          <label className="flex flex-col gap-1 text-sm">
+            Find a topic
+            <input
+              autoFocus
+              aria-label="Find a parent topic"
+              placeholder="Search topic names"
+              className="h-9 rounded-lg border border-line bg-canvas px-2"
+              value={moveQuery}
+              onChange={(event) => setMoveQuery(event.target.value)}
+            />
+          </label>
           <label className="flex flex-col gap-1 text-sm">
             New parent
             <select
@@ -506,13 +531,14 @@ export function Dialogs() {
               value={selectedMoveParentId}
               onChange={(event) => setMoveParentId(event.target.value)}
             >
-              {moveTargets.map((node) => (
+              {filteredMoveTargets.map((node) => (
                 <option key={node.id} value={node.id}>
-                  {node.text || "Untitled"}
+                  {nodePath(document!, node.id)}
                 </option>
               ))}
             </select>
           </label>
+          {filteredMoveTargets.length === 0 ? <p className="text-xs text-muted">No matching parent topic.</p> : null}
           <div className="flex justify-end gap-2">
             <button type="button" className="h-8 rounded-lg px-3 text-sm" onClick={() => setMoveNodeId(null)}>
               Cancel
@@ -520,7 +546,7 @@ export function Dialogs() {
             <button
               type="button"
               className="h-8 rounded-lg bg-accent px-3 text-sm text-white disabled:opacity-50"
-              disabled={!moveNodeId || !selectedMoveParentId || !access.canEdit}
+              disabled={!moveNodeId || !selectedMoveParentId || !access.canEdit || filteredMoveTargets.length === 0}
               onClick={() => {
                 if (!moveNodeId || !selectedMoveParentId || !document) return;
                 dispatch({ type: "reparent", nodeId: moveNodeId, parentId: selectedMoveParentId });
@@ -534,6 +560,20 @@ export function Dialogs() {
       </Modal>
     </>
   );
+}
+
+function nodePath(document: NonNullable<ReturnType<typeof useActiveDocument>>, nodeId: string) {
+  const labels: string[] = [];
+  const seen = new Set<string>();
+  let currentId: string | null = nodeId;
+  while (currentId && !seen.has(currentId)) {
+    const node: MindNode | undefined = document.nodes[currentId];
+    if (!node) break;
+    seen.add(currentId);
+    labels.unshift(node.text || "Untitled");
+    currentId = node.parentId;
+  }
+  return labels.join(" › ");
 }
 
 export function Banner() {
